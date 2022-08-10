@@ -38,14 +38,14 @@ function service_for_compose {
     # which is expected to be used for that makefile target
     service=$(
         (
-            grep -E "^($(
+            grep -H -E "^($(
                 echo $args \
                     | tr ' ' '\n' \
                     | paste -s -d'|'
-            )): # docker-compose:" Makefile \
+            )):.*?# docker-compose:" Makefile* \
                 || true
         ) \
-            | cut -d: -f3 \
+            | cut -d: -f4 \
             | head -n1
     )
     echo ${service:-$default}
@@ -76,7 +76,7 @@ function _help_makefile {
     if [ ! -f Makefile ]; then
         return
     fi
-    grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile* \
+    grep -H -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile* \
         | cut -d: -f2- \
         | sort \
         | sed 's/:\s*##\s*/ /g' \
