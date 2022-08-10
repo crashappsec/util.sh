@@ -1,3 +1,14 @@
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+RED="\033[0;31m"
+END_COLOR="\033[0m"
+if [ -n "${NO_COLOR:-}" ]; then
+    YELLOW=
+    BLUE=
+    RED=
+    END_COLOR=
+fi
+
 # ============================================================================
 # DOCKER
 # ============================================================================
@@ -30,7 +41,7 @@ function compose {
 # service_for_compose <default> "$@"
 function service_for_compose {
     default=$1
-    args=$2
+    args=${2:-}
     # looks magical but its pretty simple
     # for example if script is called with ./build.sh lint
     # it will look for a line in Makefile starting with "lint: # docker-compose:"
@@ -54,17 +65,6 @@ function service_for_compose {
 # ============================================================================
 # HELP
 # ============================================================================
-
-YELLOW="\033[0;33m"
-BLUE="\033[0;34m"
-RED="\033[0;31m"
-END_COLOR="\033[0m"
-if [ -n "${NO_COLOR:-}" ]; then
-    YELLOW=
-    BLUE=
-    RED=
-    END_COLOR=
-fi
 
 HELP_WIDTH=${HELP_WIDTH:-15}
 
@@ -149,3 +149,34 @@ function exit_on_common {
             ;;
     esac
 }
+
+# ============================================================================
+# SELF UPDATE
+# ============================================================================
+
+util_url=${util_url:-}
+util_check_min=60
+SOURCE=${BASH_SOURCE:-}
+
+# if SOURCE is NOT symlink (local testing)
+# and url is set
+# and url points to non-pinned main branch
+# and file is older than $util_check_min
+if [ ! -L ${SOURCE} ] \
+    && [ -n "${util_url}" ] \
+    && [[ "$util_url" == *"/main/"* ]] \
+    && test $(find ${SOURCE} -mmin +${util_check_min}); then
+
+    # only then check if its up to-date
+    if ! cat ${SOURCE} | sha256sum --check --quiet <(curl -s $util_url | sha256sum) &> /dev/null; then
+        echo -e ${RED}Local cached copy of \'${SOURCE}\' is outdated${END_COLOR}
+        echo -e ${RED}${util_url} has newer version${END_COLOR}
+        echo -e ${RED}To get latest version you can remove local cached copy with:${END_COLOR}
+        echo -e "\trm ${SOURCE}"
+        echo
+
+    # if up to date then touch file so that its not checked again for $util_check_min
+    else
+        touch ${SOURCE}
+    fi
+fi
