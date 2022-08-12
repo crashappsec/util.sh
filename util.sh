@@ -9,6 +9,8 @@ if [ -n "${NO_COLOR:-}" ]; then
     END_COLOR=
 fi
 
+SOURCE=${BASH_SOURCE:-}
+
 # ============================================================================
 # DOCKER
 # ============================================================================
@@ -85,7 +87,7 @@ function _help_makefile {
 }
 
 function _help_commands {
-    bin=$0
+    bin=$1
     grep -E '^\s*## help:command' $bin \
         | cut -d: -f3- \
         | sort \
@@ -94,7 +96,7 @@ function _help_commands {
 }
 
 function _help_flags {
-    bin=$0
+    bin=$1
     grep -E '^\s*## help:flag' $bin \
         | cut -d: -f3- \
         | sort \
@@ -103,7 +105,9 @@ function _help_flags {
 }
 
 # combine help from multiple sources
-function _help_combined {
+# usage:
+# show_help $@
+function show_help {
     echo -e ${YELLOW}$(basename $PWD)$END_COLOR
     echo
     echo -e ${YELLOW}${0}${END_COLOR} [flag ...] [command ...]
@@ -112,43 +116,61 @@ function _help_combined {
     echo -e ${YELLOW}Flags:${END_COLOR}
     echo
     {
-        echo -h/--help print this message | _help_format
-        _help_flags $@
+        _help_flags $0
+        _help_flags $SOURCE
     } | sort
     echo
 
     echo -e ${YELLOW}Commands:${END_COLOR}
     echo
     {
-        echo help print this message | _help_format
-        [ -f docker-compose.yml ] && echo build build local docker-compose images | _help_format
-        _help_commands $@
+        _help_commands $0
+        _help_commands $SOURCE
         _help_makefile
     } | sort
+    exit 0
 }
 
 # ============================================================================
 # RUNNING
 # ============================================================================
 
-# exit early on some of the common flags script supports
-# such as on --help or build
-# usage:
-# exit_on_common $@
-function exit_on_common {
-    # note target is explicitly $1 vs searching for flags anywhere in $@
-    # as there could be other commands which accept nested flags like --help
-    target=${1:-}
-    case "$target" in
-        -h | --help | help)
-            _help_combined $@
-            exit 0
+# this loop must be top-level so that it can overwrite $@ which is a global in bash
+for arg; do
+    shift
+    case "$arg" in
+        ## help:flag:--arm64 switch docker builds to linux/arm64 (emulated if host arch is different)
+        --arm64)
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            export DOCKER_BUILDKIT=1
+            export DOCKER_DEFAULT_PLATFORM=linux/arm64
             ;;
-        build)
-            compose build
+        ## help:flag:--amd64 switch docker builds to linux/amd64 (emulated if host arch is different)
+        --amd64)
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            export DOCKER_BUILDKIT=1
+            export DOCKER_DEFAULT_PLATFORM=linux/amd64
+            ;;
+        *)
+            set -- "$@" "$arg"
             ;;
     esac
-}
+done
+
+# note target is explicitly $1 vs searching for flags anywhere in $@
+# as there could be other commands which accept nested flags like --help
+target=${1:-}
+case "$target" in
+    ## help:flag:-h/--help print this message
+    ## help:command:help print this message
+    -h | --help | help)
+        show_help $@
+        ;;
+    ## help:command:build build local docker-compose images
+    build)
+        compose build
+        ;;
+esac
 
 # ============================================================================
 # SELF UPDATE
@@ -156,7 +178,6 @@ function exit_on_common {
 
 util_url=${util_url:-}
 util_check_min=60
-SOURCE=${BASH_SOURCE:-}
 
 # if SOURCE is NOT symlink (local testing)
 # and url is set
