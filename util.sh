@@ -168,7 +168,7 @@ case "$target" in
         ;;
     ## help:command:build build local docker-compose images
     build)
-        compose build
+        compose $@
         ;;
 esac
 
