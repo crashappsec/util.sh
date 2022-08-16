@@ -1,0 +1,36 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# Unix-style newlines with a newline ending every file
+[*]
+end_of_line = lf
+insert_final_newline = true
+
+[Makefile*]
+indent_style = tab
+
+[*.c]
+indent_style = space
+indent_size = 4
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.sh]
+indent_style = space
+indent_size = 4
+
+shell_variant      = bash  # like -ln=posix
+binary_next_line   = true  # like -bn
+switch_case_indent = true  # like -ci
+space_redirects    = true  # like -sr
+function_next_line = false # like -fn
+keep_padding       = false # like -kp
+never_split        = false # like -ns
