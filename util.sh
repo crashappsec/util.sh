@@ -12,6 +12,48 @@ fi
 SOURCE=${BASH_SOURCE:-}
 
 # ============================================================================
+# GNU
+# ============================================================================
+
+# use gnu version of command if exists
+# usage:
+# gnu <command> <args>
+# example:
+# gnu grep foo
+function gnu {
+    command=$1
+    gnucommand=g$command
+    path=$(which $command 2> /dev/null || true)
+    gnupath=$(which $gnucommand 2> /dev/null || true)
+
+    shift
+
+    bin=${gnupath:-$path}
+
+    if [ -z "$bin" ]; then
+        echo -e ${RED}${command}${END_COLOR} or ${RED}${gnucommand}${END_COLOR} not found
+        exit 1
+    fi
+
+    if [ $(uname -s) = "Darwin" ] && [ -z "$gnupath" ]; then
+        echo -e Mac detected but ${RED}$gnucommand${END_COLOR} not found > /dev/stderr
+        echo -e Mac version of ${BLUE}${command}${END_COLOR} is usually very outdated and might not work as expected > /dev/stderr
+        echo -e Consider installing GNU version of ${BLUE}${command}${END_COLOR} with brew > /dev/stderr
+        echo -e Usually: > /dev/stderr
+        echo -e "\tbrew install ${command}" > /dev/stderr
+        echo > /dev/stderr
+    fi
+
+    ${gnupath:-$path} "$@"
+}
+
+# alias some common gnu tools we use so that in the scripts
+# we dont need to explicitly use `gnu <cmd>` function above
+function grep { gnu grep "$@"; }
+function paste { gnu paste "$@"; }
+function sed { gnu sed "$@"; }
+
+# ============================================================================
 # DOCKER
 # ============================================================================
 
