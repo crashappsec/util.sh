@@ -228,6 +228,10 @@ case "$target" in
     build)
         compose $@
         ;;
+    ## help:command:down trash all local containers including all their state/volumes
+    down)
+        compose $@ --volumes
+        ;;
 esac
 
 # ============================================================================
