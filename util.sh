@@ -63,6 +63,22 @@ function sed { gnu sed "$@"; }
 # this allows to easily update containers as necessary locally
 # without needing to build+tag images
 function compose {
+    # by default docker when mounts a non-existing path will create a folder
+    # vs sometimes we would like to mount optional config files
+    # marking mount with "# ensure:file" will touch that file if not present
+    # so that docker can mount a file, not a folder
+    for i in $(
+        cat docker-compose.yml \
+            | grep -E '# ensure:file$' \
+            | awk '{ print $2 }' \
+            | cut -d: -f1
+    ); do
+        path=$(eval echo $i)
+        if ! [ -f $path ]; then
+            (set -x && touch $path)
+        fi
+    done
+
     if [ -n "${CI:-}" ]; then
         # sed uncomments lines starting with "# CI"
         # and removes lines ending with "# CI"
