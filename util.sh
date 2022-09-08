@@ -136,10 +136,22 @@ function _help_makefile {
     if [ ! -f Makefile ]; then
         return
     fi
-    grep -H -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile* \
+    grep -H -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile* \
         | cut -d: -f2- \
         | sort \
         | sed 's/:\s*##\s*/ /g' \
+        | _help_format
+
+}
+
+function _help_packagejson {
+    if [ ! -f package.json ]; then
+        return
+    fi
+    grep -H -E '"[a-zA-Z0-9_-]+":.*?## .*$$' package.json \
+        | cut -d: -f2- \
+        | sort \
+        | sed -r 's/^\s+"(.*)":\s+".*##\s+(.*)",?/\1 \2/g' \
         | _help_format
 
 }
@@ -185,6 +197,7 @@ function show_help {
         _help_commands $0
         _help_commands $SOURCE
         _help_makefile
+        _help_packagejson
     } | sort
     exit 0
 }
