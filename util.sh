@@ -102,23 +102,43 @@ function compose {
 function service_for_compose {
     default=$1
     args=${2:-}
-    # looks magical but its pretty simple
-    # for example if script is called with ./build.sh lint
-    # it will look for a line in Makefile starting with "lint: # docker-compose:"
-    # and if it finds such a line, it extracts docker-compose service
-    # which is expected to be used for that makefile target
-    service=$(
-        (
-            grep -H -E "^($(
-                echo $args \
-                    | tr ' ' '\n' \
-                    | paste -s -d'|'
-            )):.*?# docker-compose:" Makefile* \
-                || true
-        ) \
-            | cut -d: -f4 \
-            | head -n1
-    )
+    if [ -f Makefile ]; then
+        # looks magical but its pretty simple
+        # for example if script is called with ./build.sh lint
+        # it will look for a line in Makefile starting with "lint: # docker-compose:"
+        # and if it finds such a line, it extracts docker-compose service
+        # which is expected to be used for that makefile target
+        service=$(
+            (
+                grep -H -E "^($(
+                    echo $args \
+                        | tr ' ' '\n' \
+                        | paste -s -d'|'
+                )):.*?# docker-compose:" Makefile* \
+                    || true
+            ) \
+                | cut -d: -f4 \
+                | head -n1
+        )
+    elif [ -f package.json ]; then
+        # looks magical but its pretty simple
+        # for example if script is called with ./build.sh lint
+        # it will look for a line in package.json with ## @@docker-compose:
+        # and if it finds such a line, it extracts docker-compose service
+        # which is expected to be used for that scripts
+        service=$(
+            (
+                grep -H -E "^\s+\"($(
+                    echo $args \
+                        | tr ' ' '\n' \
+                        | paste -s -d'|'
+                ))\":.*?@@docker-compose:" package.json \
+                    || true
+            ) \
+                | head -n1 \
+                | sed -r 's/.*?@@docker-compose:([a-zA-Z0-9_-]+).*/\1/g'
+        )
+    fi
     echo ${service:-$default}
 }
 
@@ -141,7 +161,6 @@ function _help_makefile {
         | sort \
         | sed 's/:\s*##\s*/ /g' \
         | _help_format
-
 }
 
 function _help_packagejson {
@@ -151,9 +170,8 @@ function _help_packagejson {
     grep -H -E '"[a-zA-Z0-9_-]+":.*?## .*$$' package.json \
         | cut -d: -f2- \
         | sort \
-        | sed -r 's/^\s+"(.*)":\s+".*##\s+(.*)",?/\1 \2/g' \
+        | sed -r 's/^\s+"(.*)":\s+".*##\s+(@@[a-zA-Z0-9:_-]+\s+)?(.*)",?$/\1 \3/g' \
         | _help_format
-
 }
 
 function _help_commands {
