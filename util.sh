@@ -79,6 +79,20 @@ function compose {
         fi
     done
 
+    for i in $(
+        cat docker-compose.yml \
+            | grep -E '# ensure:network$' \
+            | awk '{ print $1 }' \
+            | cut -d: -f1
+    ); do
+        if ! docker network inspect $i &> /dev/null; then
+            (
+                set -x
+                docker network create $i
+            )
+        fi
+    done
+
     if [ -n "${CI:-}" ]; then
         # sed uncomments lines starting with "# CI"
         # and removes lines ending with "# CI"
