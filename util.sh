@@ -101,10 +101,10 @@ function compose {
         exec docker-compose \
             -f <(cat docker-compose.yml | sed -r -e 's/^(\s+)# CI\s*(.*)/\1\2/g' -e '/# CI/d') \
             --project-directory $PWD \
-            $@
+            "$@"
     else
         set -x
-        exec docker-compose $@
+        exec docker-compose "$@"
     fi
 }
 
