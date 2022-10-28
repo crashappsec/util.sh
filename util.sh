@@ -1,11 +1,13 @@
 YELLOW="\033[0;33m"
 BLUE="\033[0;34m"
 RED="\033[0;31m"
+GREEN="\033[0;32m"
 END_COLOR="\033[0m"
 if [ -n "${NO_COLOR:-}" ]; then
     YELLOW=
     BLUE=
     RED=
+    GREEN=
     END_COLOR=
 fi
 
@@ -57,30 +59,64 @@ function sed { gnu sed "$@"; }
 # DOCKER
 # ============================================================================
 
+function _cat_all_compose_files {
+    for i in $(echo $1 | tr ":" " "); do
+        # only cat real files and no
+        # process substitution devices
+        # as if they are consumed they can no longer be read
+        [ -f $i ] && cat $i
+    done
+}
+
 # wrapper around docker-compose except:
 # * in CI it switches to using images for caching
 # * locally uses docker-compose as-is which builds image from scratch
 # this allows to easily update containers as necessary locally
 # without needing to build+tag images
 function compose {
+    compose_file=
+    args=$@
+    for arg; do
+        shift
+        case "$arg" in
+            -f | --file)
+                compose_file=$compose_file:$1
+                ;;
+            --file=*)
+                compose_file=$compose_file:${arg##*=}
+                ;;
+        esac
+        compose_file=${compose_file##:}
+    done
+    set -- $@ $args
+    compose_file=${compose_file:-${COMPOSE_FILE:-docker-compose.yml}}
+
     # by default docker when mounts a non-existing path will create a folder
     # vs sometimes we would like to mount optional config files
     # marking mount with "# ensure:file" will touch that file if not present
     # so that docker can mount a file, not a folder
     for i in $(
-        cat docker-compose.yml \
+        _cat_all_compose_files $compose_file \
             | grep -E '# ensure:file$' \
             | awk '{ print $2 }' \
             | cut -d: -f1
     ); do
         path=$(eval echo $i)
         if ! [ -f $path ]; then
-            (set -x && touch $path)
+            (
+                set -x
+                touch $path
+            )
         fi
     done
 
+    # docker-compose does not create external networks
+    # however to connect containers between repos
+    # external network must be used as docker bridge network
+    # does not work on MacOSX
+    # so we should ensure external network is created
     for i in $(
-        cat docker-compose.yml \
+        _cat_all_compose_files $compose_file \
             | grep -E '# ensure:network$' \
             | awk '{ print $1 }' \
             | cut -d: -f1
@@ -90,6 +126,59 @@ function compose {
                 set -x
                 docker network create $i
             )
+        fi
+    done
+
+    # docker-compose does not allow to depend on external docker-compose files
+    # which is useful when we want to link to deps from external deps
+    # so we manually "glue" external deps
+    for i in $(
+        _cat_all_compose_files $compose_file \
+            | grep -E '# depends_on:' \
+            | cut -d# -f2
+    ); do
+        IFS=":" read -r service depends_on depends_on_compose_file bar baz < <(echo $i | cut -d: -f2-)
+
+        # very stupid method to detect if we are attemptint to run service
+        if [[ $@ = *"$service"* ]]; then
+            if ! [ -f $depends_on_compose_file ]; then
+                echo -e ${RED}\'$depends_on_compose_file\' is missing to start $depends_on${END_COLOR}
+                exit 1
+            fi
+
+            if ! compose \
+                -f $depends_on_compose_file \
+                ps \
+                --status running \
+                $depends_on \
+                | grep '(healthy)' \
+                    &> /dev/null; then
+
+                if compose \
+                    --project-directory $(dirname $depends_on_compose_file) \
+                    --file $depends_on_compose_file \
+                    --file <(
+                        cat << EOF
+version: "3"
+services:
+    wait_for_$depends_on:
+        image: busybox
+        command: "true"
+        depends_on:
+            $depends_on:
+                condition: service_healthy
+EOF
+                    ) \
+                    run \
+                    --rm \
+                    wait_for_$depends_on \
+                    | cat; then
+                    echo -e ${GREEN}Started $depends_on from \'$depends_on_compose_file\'${END_COLOR}
+                else
+                    echo -e ${RED}Failed to start $depends_on from \'$depends_on_compose_file\'${END_COLOR}
+                    exit 1
+                fi
+            fi
         fi
     done
 
@@ -279,7 +368,7 @@ case "$target" in
         ;;
     ## help:command:down trash all local containers including all their state/volumes
     down)
-        compose $@ --volumes
+        compose $@ --volumes --remove-orphans
         ;;
 esac
 
