@@ -137,7 +137,7 @@ function compose {
             | grep -E '# depends_on:' \
             | cut -d# -f2
     ); do
-        IFS=":" read -r service depends_on depends_on_compose_file bar baz < <(echo $i | cut -d: -f2-)
+        IFS=":" read -r service depends_on depends_on_compose_file bar baz < <(eval echo $i | cut -d: -f2-)
 
         # very stupid method to detect if we are attemptint to run service
         if [[ $@ = *"$service"* ]]; then
