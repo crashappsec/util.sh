@@ -150,8 +150,8 @@ function compose {
 
             if ! (
                 cd $depends_on_dir
-                compose \
-                    --project-directory $depends_on_dir \
+                COMPOSE_PROJECT_DIR=$depends_on_dir \
+                    compose \
                     -f $depends_on_compose_file \
                     ps \
                     --status running \
@@ -162,8 +162,8 @@ function compose {
 
                 if (
                     cd $depends_on_dir
-                    compose \
-                        --project-directory $depends_on_dir \
+                    COMPOSE_PROJECT_DIR=$depends_on_dir \
+                        compose \
                         --file $depends_on_compose_file \
                         --file <(
                             cat << EOF
