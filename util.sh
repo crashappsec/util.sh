@@ -137,28 +137,36 @@ function compose {
             | grep -E '# depends_on:' \
             | cut -d# -f2
     ); do
-        IFS=":" read -r service depends_on depends_on_compose_file bar baz < <(eval echo $i | cut -d: -f2-)
+        IFS=":" read -r service depends_on depends_on_path bar baz < <(eval echo $i | cut -d: -f2-)
+        depends_on_dir=$(dirname $depends_on_path)
+        depends_on_compose_file=$(basename $depends_on_path)
 
         # very stupid method to detect if we are attemptint to run service
         if [[ $@ = *"$service"* ]]; then
-            if ! [ -f $depends_on_compose_file ]; then
-                echo -e ${RED}\'$depends_on_compose_file\' is missing to start $depends_on${END_COLOR}
+            if ! [ -f $depends_on_path ]; then
+                echo -e ${RED}\'$depends_on_path\' is missing to start $depends_on${END_COLOR}
                 exit 1
             fi
 
-            if ! compose \
-                -f $depends_on_compose_file \
-                ps \
-                --status running \
-                $depends_on \
+            if ! (
+                cd $depends_on_dir
+                compose \
+                    --project-directory $depends_on_dir \
+                    -f $depends_on_compose_file \
+                    ps \
+                    --status running \
+                    $depends_on
+            ) \
                 | grep '(healthy)' \
                     &> /dev/null; then
 
-                if compose \
-                    --project-directory $(dirname $depends_on_compose_file) \
-                    --file $depends_on_compose_file \
-                    --file <(
-                        cat << EOF
+                if (
+                    cd $depends_on_dir
+                    compose \
+                        --project-directory $depends_on_dir \
+                        --file $depends_on_compose_file \
+                        --file <(
+                            cat << EOF
 version: "3"
 services:
     wait_for_$depends_on:
@@ -168,14 +176,15 @@ services:
             $depends_on:
                 condition: service_healthy
 EOF
-                    ) \
-                    run \
-                    --rm \
-                    wait_for_$depends_on \
-                    | cat; then
-                    echo -e ${GREEN}Started $depends_on from \'$depends_on_compose_file\'${END_COLOR}
+                        ) \
+                        run \
+                        --rm \
+                        wait_for_$depends_on \
+                        | cat
+                ); then
+                    echo -e ${GREEN}Started $depends_on from \'$depends_on_path\'${END_COLOR}
                 else
-                    echo -e ${RED}Failed to start $depends_on from \'$depends_on_compose_file\'${END_COLOR}
+                    echo -e ${RED}Failed to start $depends_on from \'$depends_on_path\'${END_COLOR}
                     exit 1
                 fi
             fi
