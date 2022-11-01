@@ -75,10 +75,14 @@ function _cat_all_compose_files {
 # without needing to build+tag images
 function compose {
     compose_file=
+    no_deps=
     args=$@
     for arg; do
         shift
         case "$arg" in
+            --no-deps)
+                no_deps=true
+                ;;
             -f | --file)
                 compose_file=$compose_file:$1
                 ;;
@@ -129,44 +133,45 @@ function compose {
         fi
     done
 
-    # docker-compose does not allow to depend on external docker-compose files
-    # which is useful when we want to link to deps from external deps
-    # so we manually "glue" external deps
-    for i in $(
-        _cat_all_compose_files $compose_file \
-            | grep -E '# depends_on:' \
-            | cut -d# -f2
-    ); do
-        IFS=":" read -r service depends_on depends_on_path bar baz < <(eval echo $i | cut -d: -f2-)
-        depends_on_dir=$(dirname $depends_on_path)
-        depends_on_compose_file=$(basename $depends_on_path)
+    if [ -z "$no_deps" ]; then
+        # docker-compose does not allow to depend on external docker-compose files
+        # which is useful when we want to link to deps from external deps
+        # so we manually "glue" external deps
+        for i in $(
+            _cat_all_compose_files $compose_file \
+                | grep -E '# depends_on:' \
+                | cut -d# -f2
+        ); do
+            IFS=":" read -r service depends_on depends_on_path bar baz < <(eval echo $i | cut -d: -f2-)
+            depends_on_dir=$(dirname $depends_on_path)
+            depends_on_compose_file=$(basename $depends_on_path)
 
-        # very stupid method to detect if we are attemptint to run service
-        if [[ $@ = *"$service"* ]]; then
-            if ! [ -f $depends_on_path ]; then
-                echo -e ${RED}\'$depends_on_path\' is missing to start $depends_on${END_COLOR}
-                exit 1
-            fi
+            # very stupid method to detect if we are attemptint to run service
+            if [[ $@ = *"$service"* ]]; then
+                if ! [ -f $depends_on_path ]; then
+                    echo -e ${RED}\'$depends_on_path\' is missing to start $depends_on${END_COLOR}
+                    exit 1
+                fi
 
-            if ! (
-                cd $depends_on_dir
-                COMPOSE_PROJECT_DIR=$depends_on_dir \
-                    compose \
-                    -f $depends_on_compose_file \
-                    ps \
-                    --status running \
-                    $depends_on
-            ) \
-                | grep '(healthy)' \
-                    &> /dev/null; then
-
-                if (
+                if ! (
                     cd $depends_on_dir
                     COMPOSE_PROJECT_DIR=$depends_on_dir \
                         compose \
-                        --file $depends_on_compose_file \
-                        --file <(
-                            cat << EOF
+                        -f $depends_on_compose_file \
+                        ps \
+                        --status running \
+                        $depends_on
+                ) \
+                    | grep '(healthy)' \
+                        &> /dev/null; then
+
+                    if (
+                        cd $depends_on_dir
+                        COMPOSE_PROJECT_DIR=$depends_on_dir \
+                            compose \
+                            --file $depends_on_compose_file \
+                            --file <(
+                                cat << EOF
 version: "3"
 services:
     wait_for_$depends_on:
@@ -176,20 +181,21 @@ services:
             $depends_on:
                 condition: service_healthy
 EOF
-                        ) \
-                        run \
-                        --rm \
-                        wait_for_$depends_on \
-                        | cat
-                ); then
-                    echo -e ${GREEN}Started $depends_on from \'$depends_on_path\'${END_COLOR}
-                else
-                    echo -e ${RED}Failed to start $depends_on from \'$depends_on_path\'${END_COLOR}
-                    exit 1
+                            ) \
+                            run \
+                            --rm \
+                            wait_for_$depends_on \
+                            | cat
+                    ); then
+                        echo -e ${GREEN}Started $depends_on from \'$depends_on_path\'${END_COLOR}
+                    else
+                        echo -e ${RED}Failed to start $depends_on from \'$depends_on_path\'${END_COLOR}
+                        exit 1
+                    fi
                 fi
             fi
-        fi
-    done
+        done
+    fi
 
     if [ -n "${CI:-}" ]; then
         # sed uncomments lines starting with "# CI"
