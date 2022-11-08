@@ -142,7 +142,7 @@ function compose {
                 | grep -E '# depends_on:' \
                 | cut -d# -f2
         ); do
-            IFS=":" read -r service depends_on depends_on_path bar baz < <(eval echo $i | cut -d: -f2-)
+            IFS=":" read -r service depends_on depends_on_path < <(eval echo $i | cut -d: -f2-)
             depends_on_dir=$(dirname $depends_on_path)
             depends_on_compose_file=$(basename $depends_on_path)
 
