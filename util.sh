@@ -68,9 +68,9 @@ function _cat_all_compose_files {
     done
 }
 
-# wrapper around docker-compose except:
+# wrapper around docker compose except:
 # * in CI it switches to using images for caching
-# * locally uses docker-compose as-is which builds image from scratch
+# * locally uses docker compose as-is which builds image from scratch
 # this allows to easily update containers as necessary locally
 # without needing to build+tag images
 function compose {
@@ -114,7 +114,7 @@ function compose {
         fi
     done
 
-    # docker-compose does not create external networks
+    # docker compose does not create external networks
     # however to connect containers between repos
     # external network must be used as docker bridge network
     # does not work on MacOSX
@@ -134,7 +134,7 @@ function compose {
     done
 
     if [ -z "$no_deps" ]; then
-        # docker-compose does not allow to depend on external docker-compose files
+        # docker compose does not allow to depend on external docker compose files
         # which is useful when we want to link to deps from external deps
         # so we manually "glue" external deps
         for i in $(
@@ -202,18 +202,18 @@ EOF
         # and removes lines ending with "# CI"
         # therefore allowing to switch what is used locally and in CI
         set -x
-        exec docker-compose \
+        exec docker compose \
             -f <(cat docker-compose.yml | sed -r -e 's/^(\s+)# CI\s*(.*)/\1\2/g' -e '/# CI/d') \
             --project-directory $PWD \
             "$@"
     else
         set -x
-        exec docker-compose "$@"
+        exec docker compose "$@"
     fi
 }
 
-# if Makefile target specifies which docker-compose service to use
-# get its name to be used with docker-compose
+# if Makefile target specifies which docker compose service to use
+# get its name to be used with docker compose
 # otherwise fallback to provided default
 # usage:
 # service_for_compose <default> "$@"
@@ -224,7 +224,7 @@ function service_for_compose {
         # looks magical but its pretty simple
         # for example if script is called with ./build.sh lint
         # it will look for a line in Makefile starting with "lint: # docker-compose:"
-        # and if it finds such a line, it extracts docker-compose service
+        # and if it finds such a line, it extracts docker compose service
         # which is expected to be used for that makefile target
         service=$(
             (
@@ -242,7 +242,7 @@ function service_for_compose {
         # looks magical but its pretty simple
         # for example if script is called with ./build.sh lint
         # it will look for a line in package.json with ## @@docker-compose:
-        # and if it finds such a line, it extracts docker-compose service
+        # and if it finds such a line, it extracts docker compose service
         # which is expected to be used for that scripts
         service=$(
             (
@@ -373,11 +373,11 @@ case "$target" in
     -h | --help | help)
         show_help $@
         ;;
-    ## help:command:build build local docker-compose images
+    ## help:command:build build local docker compose images
     build)
         compose $@
         ;;
-    ## help:command:pull pull latest docker-compose images
+    ## help:command:pull pull latest docker compose images
     pull)
         compose $@
         ;;
