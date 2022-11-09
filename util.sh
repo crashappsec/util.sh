@@ -13,6 +13,16 @@ fi
 
 SOURCE=${BASH_SOURCE:-}
 
+if [[ $(echo $BASH_VERSION | head -c1) -lt 5 ]]; then
+    echo -e "${RED}Detected old version of bash==$BASH_VERSION${END_COLOR}" > /dev/stderr
+    echo -e "${RED}Please upgrade to bash>=5${END_COLOR}" > /dev/stderr
+    if [ $(uname -s) = "Darwin" ]; then
+        echo -e Usually: > /dev/stderr
+        echo -e "\tbrew install bash" > /dev/stderr
+    fi
+    echo > /dev/stderr
+fi
+
 # ============================================================================
 # GNU
 # ============================================================================
@@ -324,7 +334,7 @@ function show_help {
     {
         _help_flags $0
         _help_flags $SOURCE
-    } | sort
+    } | sort | uniq
     echo
 
     echo -e ${YELLOW}Commands:${END_COLOR}
@@ -334,7 +344,7 @@ function show_help {
         _help_commands $SOURCE
         _help_makefile
         _help_packagejson
-    } | sort
+    } | sort | uniq
     exit 0
 }
 
