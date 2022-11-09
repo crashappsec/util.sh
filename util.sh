@@ -128,7 +128,7 @@ function compose {
         if ! docker network inspect $i &> /dev/null; then
             (
                 set -x
-                docker network create $i
+                docker network create $i > /dev/stderr
             )
         fi
     done
