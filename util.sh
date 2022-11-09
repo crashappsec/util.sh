@@ -285,7 +285,7 @@ function _help_packagejson {
     if [ ! -f package.json ]; then
         return
     fi
-    grep -H -E '"[a-zA-Z0-9:_-]+":.*?## .*$$' package.json \
+    grep -H -E '"[a-zA-Z0-9:_\.-]+":.*?## .*$$' package.json \
         | cut -d: -f2- \
         | sort \
         | sed -r 's/^\s+"(.*)":\s+".*##\s+(@@[a-zA-Z0-9:_-]+\s+)?(.*)",?$/\1 \3/g' \
