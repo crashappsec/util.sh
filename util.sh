@@ -21,6 +21,7 @@ if [[ $(echo $BASH_VERSION | head -c1) -lt 5 ]]; then
         echo -e "\tbrew install bash" > /dev/stderr
     fi
     echo > /dev/stderr
+    exit 1
 fi
 
 # ============================================================================
