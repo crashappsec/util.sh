@@ -13,7 +13,16 @@ fi
 
 SOURCE=${BASH_SOURCE:-}
 
-if [[ $(echo $BASH_VERSION | head -c1) -lt 5 ]]; then
+function _version {
+    # https://stackoverflow.com/questions/4023830/how-to-compare-two-strings-in-dot-separated-version-format-in-bash
+    echo "$@" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }'
+}
+
+function _version_from_value {
+    echo "$@" | grep -Eo '[0-9\.]+' | head -n1
+}
+
+if [[ $(_version $(_version_from_value $BASH_VERSION)) -lt $(_version 5) ]]; then
     echo -e "${RED}Detected old version of bash==$BASH_VERSION${END_COLOR}" > /dev/stderr
     echo -e "${RED}Please upgrade to bash>=5${END_COLOR}" > /dev/stderr
     if [ $(uname -s) = "Darwin" ]; then
@@ -85,6 +94,19 @@ function _cat_all_compose_files {
 # this allows to easily update containers as necessary locally
 # without needing to build+tag images
 function compose {
+    DOCKER_VERSION=$(_version_from_value $(docker --version))
+    if [[ $(_version $DOCKER_VERSION) -lt $(_version 20.10.21) ]]; then
+        echo -e "${RED}Detected old version of docker==$DOCKER_VERSION${END_COLOR}" > /dev/stderr
+        echo -e "${RED}Please upgrade docker>=20.10.21${END_COLOR}" > /dev/stderr
+    fi
+
+    COMPOSE_VERSION=$(_version_from_value $(docker compose version))
+    if [[ $(_version $COMPOSE_VERSION) -lt $(_version 2) ]]; then
+        echo -e "${RED}Detected old version of docker compose==$COMPOSE_VERSION${END_COLOR}" > /dev/stderr
+        echo -e "${RED}Please ensure you are using docker compose>=2${END_COLOR}" > /dev/stderr
+        echo -e "\thttps://docs.docker.com/compose/compose-v2/" > /dev/stderr
+    fi
+
     compose_file=
     no_deps=
     args=$@
