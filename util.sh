@@ -53,7 +53,7 @@ function gnu {
     bin=${gnupath:-$path}
 
     if [ -z "$bin" ]; then
-        echo -e ${RED}${command}${END_COLOR} or ${RED}${gnucommand}${END_COLOR} not found
+        echo -e ${RED}${command}${END_COLOR} or ${RED}${gnucommand}${END_COLOR} not found > /dev/stderr
         exit 1
     fi
 
@@ -182,7 +182,7 @@ function compose {
             # very stupid method to detect if we are attemptint to run service
             if [[ $@ = *"$service"* ]]; then
                 if ! [ -f $depends_on_path ]; then
-                    echo -e ${RED}\'$depends_on_path\' is missing to start $depends_on${END_COLOR}
+                    echo -e ${RED}\'$depends_on_path\' is missing to start $depends_on${END_COLOR} > /dev/stderr
                     exit 1
                 fi
 
@@ -220,9 +220,9 @@ EOF
                             wait_for_$depends_on \
                             | cat
                     ); then
-                        echo -e ${GREEN}Started $depends_on from \'$depends_on_path\'${END_COLOR}
+                        echo -e ${GREEN}Started $depends_on from \'$depends_on_path\'${END_COLOR} > /dev/stderr
                     else
-                        echo -e ${RED}Failed to start $depends_on from \'$depends_on_path\'${END_COLOR}
+                        echo -e ${RED}Failed to start $depends_on from \'$depends_on_path\'${END_COLOR} > /dev/stderr
                         exit 1
                     fi
                 fi
@@ -291,6 +291,42 @@ function service_for_compose {
         )
     fi
     echo ${service:-$default}
+}
+
+# ============================================================================
+# AWS SECRETS
+# ============================================================================
+
+function aws_secret {
+    if ! which jq &> /dev/null; then
+        echo -e ${RED}jq is missing${END_COLOR} > /dev/stderr
+        if [ $(uname -s) = "Darwin" ]; then
+            echo -e Usually: > /dev/stderr
+            echo -e "\tbrew install jq" > /dev/stderr
+        fi
+        exit 1
+    fi
+    if ! which aws &> /dev/null; then
+        echo -e ${RED}aws cli is missing${END_COLOR} > /dev/stderr
+        echo -e Usually: > /dev/stderr
+        echo -e "\tpipx install awscli" > /dev/stderr
+        exit 1
+    fi
+    if ! aws sts get-caller-identity > /dev/null; then
+        echo -e ${RED}aws cli does not seem to be authenticated${END_COLOR} > /dev/stderr
+        echo -e ${RED}ensure:${END_COLOR} > /dev/stderr
+        echo -e "\t* MFA creds are setup. See Notion how to set that up" > /dev/stderr
+        echo -e "\t* Rerun 'aws-mfa' to ensure MFA session token is up-to-date" > /dev/stderr
+        exit 1
+    fi
+    id=$1
+    key=$2
+    aws secretsmanager \
+        get-secret-value \
+        --secret-id=$id \
+        --query='SecretString' \
+        --output=text \
+        | jq ".$key" -r
 }
 
 # ============================================================================
@@ -438,11 +474,11 @@ if [ ! -L ${SOURCE} ] \
 
     # only then check if its up to-date
     if ! cat ${SOURCE} | sha256sum --check --quiet <(curl -s $util_url | sha256sum) &> /dev/null; then
-        echo -e ${RED}Local cached copy of \'${SOURCE}\' is outdated${END_COLOR}
-        echo -e ${RED}${util_url} has newer version${END_COLOR}
-        echo -e ${RED}To get latest version you can remove local cached copy with:${END_COLOR}
-        echo -e "\trm ${SOURCE}"
-        echo
+        echo -e ${RED}Local cached copy of \'${SOURCE}\' is outdated${END_COLOR} > /dev/stderr
+        echo -e ${RED}${util_url} has newer version${END_COLOR} > /dev/stderr
+        echo -e ${RED}To get latest version you can remove local cached copy with:${END_COLOR} > /dev/stderr
+        echo -e "\trm ${SOURCE}" > /dev/stderr
+        echo > /dev/stderr
 
     # if up to date then touch file so that its not checked again for $util_check_min
     else
