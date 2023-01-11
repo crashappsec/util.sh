@@ -294,18 +294,10 @@ function service_for_compose {
 }
 
 # ============================================================================
-# AWS SECRETS
+# AWS
 # ============================================================================
 
-function aws_secret {
-    if ! which jq &> /dev/null; then
-        echo -e ${RED}jq is missing${END_COLOR} > /dev/stderr
-        if [ $(uname -s) = "Darwin" ]; then
-            echo -e Usually: > /dev/stderr
-            echo -e "\tbrew install jq" > /dev/stderr
-        fi
-        exit 1
-    fi
+function _ensure_aws_profile {
     if ! which aws &> /dev/null; then
         echo -e ${RED}aws cli is missing${END_COLOR} > /dev/stderr
         echo -e Usually: > /dev/stderr
@@ -319,6 +311,21 @@ function aws_secret {
         echo -e "\t* Rerun 'aws-mfa' to ensure MFA session token is up-to-date" > /dev/stderr
         exit 1
     fi
+}
+
+# get the content of the aws secret subkey
+# usage:
+# aws_secret <secretid> <key>
+function aws_secret {
+    if ! which jq &> /dev/null; then
+        echo -e ${RED}jq is missing${END_COLOR} > /dev/stderr
+        if [ $(uname -s) = "Darwin" ]; then
+            echo -e Usually: > /dev/stderr
+            echo -e "\tbrew install jq" > /dev/stderr
+        fi
+        exit 1
+    fi
+    _ensure_aws_profile
     id=$1
     key=$2
     aws secretsmanager \
@@ -327,6 +334,41 @@ function aws_secret {
         --query='SecretString' \
         --output=text \
         | jq ".$key" -r
+}
+
+# lookup full ecr repo by its name
+# usage:
+# aws_ecr_repo <name>
+function aws_ecr_repo {
+    name=$1
+    if [[ "$name" = *amazonaws.com* ]]; then
+        echo $name
+        return
+    fi
+    _ensure_aws_profile
+    aws ecr describe-repositories \
+        --repository-names=$name \
+        --query='repositories[].repositoryUri' \
+        --output=text
+}
+
+# login to ecr repo
+# usage:
+# aws_ecr_login <name>
+function aws_ecr_login {
+    docker_repo=$(aws_ecr_repo $1)
+    _ensure_aws_profile
+    aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+}
+
+# redeploy existing ecs service
+# usage:
+# aws_ecs_redeploy <cluster> <service>
+function aws_ecs_redeploy {
+    cluster=$1
+    service=$2
+    aws ecs update-service --cluster $cluster --service $service --force-new-deployment
+    aws ecs wait services-stable --cluster $cluster --service $service
 }
 
 # ============================================================================
