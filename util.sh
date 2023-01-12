@@ -381,10 +381,7 @@ function _help_format {
     cat - | awk "{printf \"${BLUE}%-${HELP_WIDTH}s${END_COLOR} %s\n\", \$1, substr(\$0, length(\$1) + 1);}"
 }
 
-function _help_makefile {
-    if [ ! -f Makefile ]; then
-        return
-    fi
+function _help_file_makefile {
     grep -H -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile* \
         | cut -d: -f2- \
         | sort \
@@ -392,10 +389,7 @@ function _help_makefile {
         | _help_format
 }
 
-function _help_packagejson {
-    if [ ! -f package.json ]; then
-        return
-    fi
+function _help_file_packagejson {
     grep -H -E '"[a-zA-Z0-9:_\.-]+":.*?## .*$$' package.json \
         | cut -d: -f2- \
         | sort \
@@ -403,16 +397,29 @@ function _help_packagejson {
         | _help_format
 }
 
-function _help_commands {
+function _help_file_commands {
     bin=$1
-    grep -E '^\s*## help:command' $bin \
-        | cut -d: -f3- \
-        | sort \
-        | _help_format \
-        || true
+    if [ ! -f $bin ]; then
+        return
+    fi
+    case "$bin" in
+        Makefile)
+            _help_makefile
+            ;;
+        package.json)
+            _help_packagejson
+            ;;
+        *)
+            grep -E '^\s*## help:command' $bin \
+                | cut -d: -f3- \
+                | sort \
+                | _help_format \
+                || true
+            ;;
+    esac
 }
 
-function _help_flags {
+function _help_file_flags {
     bin=$1
     grep -E '^\s*## help:flag' $bin \
         | cut -d: -f3- \
@@ -421,33 +428,47 @@ function _help_flags {
         || true
 }
 
-# combine help from multiple sources
-# usage:
-# show_help $@
-function show_help {
+function _help_header {
     echo -e ${YELLOW}$(basename $PWD)$END_COLOR
     echo
-    echo -e ${YELLOW}${0}${END_COLOR} [flag ...] [command ...]
+    echo -e ${YELLOW}$(basename $0)${END_COLOR} [flag ...] [command ...]
     echo
+}
 
+function _help_flags {
     echo -e ${YELLOW}Flags:${END_COLOR}
     echo
     {
-        _help_flags $0
-        _help_flags $SOURCE
+        for i in $@; do
+            _help_file_flags $i
+        done
     } | sort | uniq
-    echo
+}
 
+function _help_commands {
     echo -e ${YELLOW}Commands:${END_COLOR}
     echo
     {
-        _help_commands $0
-        _help_commands $SOURCE
-        _help_makefile
-        _help_packagejson
+        for i in $@; do
+            _help_file_commands $i
+        done
     } | sort | uniq
-    exit 0
 }
+
+if [[ $(type -t show_help) != function ]]; then
+    # combine help from multiple sources
+    # usage:
+    # show_help $@
+    function show_help {
+        _help_header
+
+        _help_flags $0 $SOURCE
+        echo
+        _help_commands $0 $SOURCE Makefile package.json
+
+        exit 0
+    }
+fi
 
 # ============================================================================
 # RUNNING
