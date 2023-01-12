@@ -4,9 +4,9 @@ set -eEu
 set -o pipefail
 
 function show_help {
-	echo -e "${YELLOW}$(basename $0)${END_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]"
-	echo
-	cat <<EOF
+    echo -e "${YELLOW}$(basename $0)${END_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]"
+    echo
+    cat << EOF
 Wrapper around 'aws sts assume-role'
 
 It allows to either parse result of assume-role and output script to
@@ -28,32 +28,32 @@ Finally it can directly exec a command with aws role env vars populated:
 
 assume-role <ROLE> -- ./build.sh deploy
 EOF
-	echo
-	_help_flags $0
-	exit 0
+    echo
+    _help_flags $0
+    exit 0
 }
 
 SCRIPTPATH="$(
-	cd $(dirname $(realpath "$0")) >/dev/null 2>&1
-	pwd -P
+    cd $(dirname $(realpath "$0")) > /dev/null 2>&1
+    pwd -P
 )"
 source $SCRIPTPATH/../util.sh
 
 _ensure_aws_profile
 
 if [ -t 0 ]; then
-	role=$1
-	shift
-	if ! [[ "$role" = arn* ]]; then
-		role=arn:aws:iam::$(
-			aws sts get-caller-identity \
-				--query="Account" \
-				--output=text
-		):role/$role
-	fi
-	assumed_role=$(aws sts assume-role --role-arn=$role --role-session-name=$(date +%s))
+    role=$1
+    shift
+    if ! [[ "$role" = arn* ]]; then
+        role=arn:aws:iam::$(
+            aws sts get-caller-identity \
+                --query="Account" \
+                --output=text
+        ):role/$role
+    fi
+    assumed_role=$(aws sts assume-role --role-arn=$role --role-session-name=$(date +%s))
 else
-	assumed_role=$(cat -)
+    assumed_role=$(cat -)
 fi
 
 region=${AWS_DEFAULT_REGION:-$(aws configure get region)}
@@ -63,7 +63,7 @@ session_token=$(echo $assumed_role | jq -r '.Credentials.SessionToken')
 expiration=$(echo $assumed_role | jq -r '.Credentials.Expiration')
 
 function _credentials {
-	cat <<EOF
+    cat << EOF
 [role]
 region = $region
 aws_access_key_id = $key_id
@@ -74,27 +74,27 @@ EOF
 }
 
 function _env {
-	if [ -n "$export" ]; then
-		export="export "
-	fi
-	case "$shell" in
-	fish)
-		cat <<EOF
+    if [ -n "$export" ]; then
+        export="export "
+    fi
+    case "$shell" in
+        fish)
+            cat << EOF
 set -gx AWS_DEFAULT_REGION $region
 set -gx AWS_ACCESS_KEY_ID $key_id
 set -gx AWS_SECRET_ACCESS_KEY $secret_key
 set -gx AWS_SESSION_TOKEN $session_token
 EOF
-		;;
-	*)
-		cat <<EOF
+            ;;
+        *)
+            cat << EOF
 ${export}AWS_DEFAULT_REGION=$region
 ${export}AWS_ACCESS_KEY_ID=$key_id
 ${export}AWS_SECRET_ACCESS_KEY=$secret_key
 ${export}AWS_SESSION_TOKEN=$session_token
 EOF
-		;;
-	esac
+            ;;
+    esac
 }
 
 credentials=
@@ -104,38 +104,38 @@ cmd=
 shell=${STARSHIP_SHELL:-bash}
 
 for arg; do
-	shift
-	case "$arg" in
-	## help:flag:--config output ~/.aws/credentials config block
-	## help:flag:--credentials output ~/.aws/credentials config block
-	--config) ;&
-	--credentials)
-		credentials=true
-		;;
-	## help:flag:--shell=* which shell to output env vars
-	--shell=*)
-		shell=${arg##*=}
-		;;
-	## help:flag:-- after delimiter execute command with AWS assumed role
-	--)
-		cmd="$@"
-		export=true
-		break
-		;;
-	*)
-		set -- "$@" "$arg"
-		;;
-	esac
+    shift
+    case "$arg" in
+        ## help:flag:--config output ~/.aws/credentials config block
+        ## help:flag:--credentials output ~/.aws/credentials config block
+        --config) ;&
+        --credentials)
+            credentials=true
+            ;;
+        ## help:flag:--shell=* which shell to output env vars
+        --shell=*)
+            shell=${arg##*=}
+            ;;
+        ## help:flag:-- after delimiter execute command with AWS assumed role
+        --)
+            cmd="$@"
+            export=true
+            break
+            ;;
+        *)
+            set -- "$@" "$arg"
+            ;;
+    esac
 done
 
 if [ -n "$cmd" ]; then
-	source <(shell=bash _env)
-	exec $cmd
+    source <(shell=bash _env)
+    exec $cmd
 
 elif [ -n "$credentials" ]; then
-	_credentials
+    _credentials
 
 else
-	_env
+    _env
 
 fi
