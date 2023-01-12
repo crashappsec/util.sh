@@ -4,7 +4,8 @@ set -eEu
 set -o pipefail
 
 function show_help {
-    echo -e "${YELLOW}$(basename $0)${END_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]"
+    name=$(basename $0)
+    echo -e "${YELLOW}${name}${END_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]"
     echo
     cat << EOF
 Wrapper around 'aws sts assume-role'
@@ -12,21 +13,21 @@ Wrapper around 'aws sts assume-role'
 It allows to either parse result of assume-role and output script to
 set AWS_* env variables:
 
-aws sts assume-role ... | assume-role | eval
-aws sts assume-role ... | assume-role --shell=fish | eval
+aws sts assume-role ... | $name | eval
+aws sts assume-role ... | $name --shell=fish | eval
 
 Alternatively it can output credentials config block:
 
-aws sts assume-role ... | assume-role --config >> ~/.aws/credentials
+aws sts assume-role ... | $name --config >> ~/.aws/credentials
 
 The wrapper can natively assume role itself as well:
 
-assume-role <ROLE> | eval
-assume-role <ROLE> --config >> ~/.aws/credentials
+$name <ROLE> | eval
+$name <ROLE> --config >> ~/.aws/credentials
 
 Finally it can directly exec a command with aws role env vars populated:
 
-assume-role <ROLE> -- ./build.sh deploy
+$name <ROLE> -- ./build.sh deploy
 EOF
     echo
     _help_flags $0
