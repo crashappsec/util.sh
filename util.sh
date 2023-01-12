@@ -10,6 +10,11 @@ if [ -n "${NO_COLOR:-}" ]; then
     GREEN=
     END_COLOR=
 fi
+IYELLOW=$(echo -en $YELLOW)
+IBLUE=$(echo -en $BLUE)
+IRED=$(echo -en $RED)
+IGREEN=$(echo -en $GREEN)
+IEND_COLOR=$(echo -en $END_COLOR)
 
 SOURCE=${BASH_SOURCE:-}
 
