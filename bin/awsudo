@@ -11,15 +11,23 @@ ${IYELLOW}${name}${IEND_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]
 
 Wrapper around 'aws sts assume-role'
 
-It allows to either parse result of assume-role and output script to
-set AWS_* env variables:
+It allows to either parse result of assume-role and output script to set
+AWS_* env variables:
 
 aws sts assume-role ... | ${IGREEN}$name${IEND_COLOR} | eval
+
+To customize which shell output is exported use ${IYELLOW}--shell${IEND_COLOR} flag:
+
 aws sts assume-role ... | ${IGREEN}$name --shell=fish${IEND_COLOR} | eval
 
 Alternatively it can output credentials config block:
 
 aws sts assume-role ... | ${IGREEN}$name --config${IEND_COLOR} >> ~/.aws/credentials
+
+It will generate profile config block with a name "role".
+To customize that use ${IYELLOW}--profile${IEND_COLOR} flag:
+
+aws sts assume-role ... | ${IGREEN}$name --config --profile=default${IEND_COLOR} >> ~/.aws/credentials
 
 The wrapper can natively assume role itself as well:
 
@@ -104,6 +112,7 @@ credentials=
 env=
 export=
 cmd=
+profile=role
 shell=${STARSHIP_SHELL:-bash}
 
 for arg; do
@@ -114,6 +123,10 @@ for arg; do
     --config) ;&
     --credentials)
         credentials=true
+        ;;
+    ## help:flag:--profile=* name of profile to export with --config. default is "role"
+    --profile=*)
+        profile=${arg##*=}
         ;;
     ## help:flag:--shell=* which shell to output env vars
     --shell=*)
