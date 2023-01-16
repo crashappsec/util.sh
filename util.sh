@@ -333,12 +333,15 @@ function aws_secret {
     _ensure_aws_profile
     id=$1
     key=$2
-    aws secretsmanager \
-        get-secret-value \
-        --secret-id=$id \
-        --query='SecretString' \
-        --output=text \
-        | jq ".$key" -r
+    (
+        set -x
+        aws secretsmanager \
+            get-secret-value \
+            --secret-id=$id \
+            --query='SecretString' \
+            --output=text \
+            | jq ".$key" -r
+    )
 }
 
 # lookup full ecr repo by its name
@@ -351,10 +354,13 @@ function aws_ecr_repo {
         return
     fi
     _ensure_aws_profile
-    aws ecr describe-repositories \
-        --repository-names=$name \
-        --query='repositories[].repositoryUri' \
-        --output=text
+    (
+        set -x
+        aws ecr describe-repositories \
+            --repository-names=$name \
+            --query='repositories[].repositoryUri' \
+            --output=text
+    )
 }
 
 # login to ecr repo
@@ -363,7 +369,10 @@ function aws_ecr_repo {
 function aws_ecr_login {
     docker_repo=$(aws_ecr_repo $1)
     _ensure_aws_profile
-    aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+    (
+        set -x
+        aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+    )
 }
 
 # redeploy existing ecs service
@@ -372,8 +381,11 @@ function aws_ecr_login {
 function aws_ecs_redeploy {
     cluster=$1
     service=$2
-    aws ecs update-service --cluster $cluster --service $service --force-new-deployment
-    aws ecs wait services-stable --cluster $cluster --service $service
+    (
+        set -x
+        aws ecs update-service --cluster $cluster --service $service --force-new-deployment
+        aws ecs wait services-stable --cluster $cluster --service $service
+    )
 }
 
 # ============================================================================
