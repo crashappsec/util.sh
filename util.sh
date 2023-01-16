@@ -421,10 +421,10 @@ function _help_file_commands {
     fi
     case "$bin" in
         Makefile)
-            _help_makefile
+            _help_file_makefile
             ;;
         package.json)
-            _help_packagejson
+            _help_file_packagejson
             ;;
         *)
             grep -E '^\s*## help:command' $bin \
