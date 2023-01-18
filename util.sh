@@ -10,6 +10,11 @@ if [ -n "${NO_COLOR:-}" ]; then
     GREEN=
     END_COLOR=
 fi
+IYELLOW=$(echo -en $YELLOW)
+IBLUE=$(echo -en $BLUE)
+IRED=$(echo -en $RED)
+IGREEN=$(echo -en $GREEN)
+IEND_COLOR=$(echo -en $END_COLOR)
 
 SOURCE=${BASH_SOURCE:-}
 
@@ -328,12 +333,15 @@ function aws_secret {
     _ensure_aws_profile
     id=$1
     key=$2
-    aws secretsmanager \
-        get-secret-value \
-        --secret-id=$id \
-        --query='SecretString' \
-        --output=text \
-        | jq ".$key" -r
+    (
+        set -x
+        aws secretsmanager \
+            get-secret-value \
+            --secret-id=$id \
+            --query='SecretString' \
+            --output=text \
+            | jq ".$key" -r
+    )
 }
 
 # lookup full ecr repo by its name
@@ -346,10 +354,13 @@ function aws_ecr_repo {
         return
     fi
     _ensure_aws_profile
-    aws ecr describe-repositories \
-        --repository-names=$name \
-        --query='repositories[].repositoryUri' \
-        --output=text
+    (
+        set -x
+        aws ecr describe-repositories \
+            --repository-names=$name \
+            --query='repositories[].repositoryUri' \
+            --output=text
+    )
 }
 
 # login to ecr repo
@@ -358,7 +369,10 @@ function aws_ecr_repo {
 function aws_ecr_login {
     docker_repo=$(aws_ecr_repo $1)
     _ensure_aws_profile
-    aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+    (
+        set -x
+        aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+    )
 }
 
 # redeploy existing ecs service
@@ -367,8 +381,11 @@ function aws_ecr_login {
 function aws_ecs_redeploy {
     cluster=$1
     service=$2
-    aws ecs update-service --cluster $cluster --service $service --force-new-deployment
-    aws ecs wait services-stable --cluster $cluster --service $service
+    (
+        set -x
+        aws ecs update-service --cluster $cluster --service $service --force-new-deployment
+        aws ecs wait services-stable --cluster $cluster --service $service
+    )
 }
 
 # ============================================================================
@@ -381,10 +398,7 @@ function _help_format {
     cat - | awk "{printf \"${BLUE}%-${HELP_WIDTH}s${END_COLOR} %s\n\", \$1, substr(\$0, length(\$1) + 1);}"
 }
 
-function _help_makefile {
-    if [ ! -f Makefile ]; then
-        return
-    fi
+function _help_file_makefile {
     grep -H -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile* \
         | cut -d: -f2- \
         | sort \
@@ -392,10 +406,7 @@ function _help_makefile {
         | _help_format
 }
 
-function _help_packagejson {
-    if [ ! -f package.json ]; then
-        return
-    fi
+function _help_file_packagejson {
     grep -H -E '"[a-zA-Z0-9:_\.-]+":.*?## .*$$' package.json \
         | cut -d: -f2- \
         | sort \
@@ -403,16 +414,29 @@ function _help_packagejson {
         | _help_format
 }
 
-function _help_commands {
+function _help_file_commands {
     bin=$1
-    grep -E '^\s*## help:command' $bin \
-        | cut -d: -f3- \
-        | sort \
-        | _help_format \
-        || true
+    if [ ! -f $bin ]; then
+        return
+    fi
+    case "$bin" in
+        Makefile)
+            _help_file_makefile
+            ;;
+        package.json)
+            _help_file_packagejson
+            ;;
+        *)
+            grep -E '^\s*## help:command' $bin \
+                | cut -d: -f3- \
+                | sort \
+                | _help_format \
+                || true
+            ;;
+    esac
 }
 
-function _help_flags {
+function _help_file_flags {
     bin=$1
     grep -E '^\s*## help:flag' $bin \
         | cut -d: -f3- \
@@ -421,33 +445,47 @@ function _help_flags {
         || true
 }
 
-# combine help from multiple sources
-# usage:
-# show_help $@
-function show_help {
+function _help_header {
     echo -e ${YELLOW}$(basename $PWD)$END_COLOR
     echo
-    echo -e ${YELLOW}${0}${END_COLOR} [flag ...] [command ...]
+    echo -e ${YELLOW}$(basename $0)${END_COLOR} [flag ...] [command ...]
     echo
+}
 
+function _help_flags {
     echo -e ${YELLOW}Flags:${END_COLOR}
     echo
     {
-        _help_flags $0
-        _help_flags $SOURCE
+        for i in $@; do
+            _help_file_flags $i
+        done
     } | sort | uniq
-    echo
+}
 
+function _help_commands {
     echo -e ${YELLOW}Commands:${END_COLOR}
     echo
     {
-        _help_commands $0
-        _help_commands $SOURCE
-        _help_makefile
-        _help_packagejson
+        for i in $@; do
+            _help_file_commands $i
+        done
     } | sort | uniq
-    exit 0
 }
+
+if [[ $(type -t show_help) != function ]]; then
+    # combine help from multiple sources
+    # usage:
+    # show_help $@
+    function show_help {
+        _help_header
+
+        _help_flags $0 $SOURCE
+        echo
+        _help_commands $0 $SOURCE Makefile package.json
+
+        exit 0
+    }
+fi
 
 # ============================================================================
 # RUNNING
