@@ -388,6 +388,30 @@ function aws_ecs_redeploy {
     )
 }
 
+# redeploy existing lambda
+# usage:
+# aws_ecs_redeploy <image_uri>
+function aws_lambda_redeploy_by_image {
+    image_uri=$1
+    for arn in $(
+        aws lambda list-functions \
+            --query 'Functions[].[FunctionArn]' \
+            --output text \
+            | xargs -I {} \
+                aws lambda list-tags \
+                --resource {} \
+                --query '{"{}":Tags}' \
+            | jq -r ". | to_entries[] | . | select(.value.image_uri == \"$image_uri\") | .key"
+    ); do
+        echo $arn
+        (
+            set -x
+            aws lambda update-function-code --function-name $arn --image-uri $image_uri
+            aws lambda wait function-updated --function-name $arn
+        )
+    done
+}
+
 # ============================================================================
 # HELP
 # ============================================================================
