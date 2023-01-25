@@ -81,6 +81,21 @@ function paste { gnu paste "$@"; }
 function sed { gnu sed "$@"; }
 
 # ============================================================================
+# TOOLS
+# ============================================================================
+
+function _ensure_jq {
+    if ! which jq &> /dev/null; then
+        echo -e ${RED}jq is missing${END_COLOR} > /dev/stderr
+        if [ $(uname -s) = "Darwin" ]; then
+            echo -e Usually: > /dev/stderr
+            echo -e "\tbrew install jq" > /dev/stderr
+        fi
+        exit 1
+    fi
+}
+
+# ============================================================================
 # DOCKER
 # ============================================================================
 
@@ -322,14 +337,7 @@ function _ensure_aws_profile {
 # usage:
 # aws_secret <secretid> <key>
 function aws_secret {
-    if ! which jq &> /dev/null; then
-        echo -e ${RED}jq is missing${END_COLOR} > /dev/stderr
-        if [ $(uname -s) = "Darwin" ]; then
-            echo -e Usually: > /dev/stderr
-            echo -e "\tbrew install jq" > /dev/stderr
-        fi
-        exit 1
-    fi
+    _ensure_jq
     _ensure_aws_profile
     id=$1
     key=$2
@@ -386,6 +394,31 @@ function aws_ecs_redeploy {
         aws ecs update-service --cluster $cluster --service $service --force-new-deployment
         aws ecs wait services-stable --cluster $cluster --service $service
     )
+}
+
+# redeploy existing lambda
+# usage:
+# aws_ecs_redeploy <image_uri>
+function aws_lambda_redeploy_by_image {
+    _ensure_jq
+    image_uri=$1
+    for arn in $(
+        aws lambda list-functions \
+            --query 'Functions[].[FunctionArn]' \
+            --output text \
+            | xargs -I {} \
+                aws lambda list-tags \
+                --resource {} \
+                --query '{"{}":Tags}' \
+            | jq -r ". | to_entries[] | . | select(.value.image_uri == \"$image_uri\") | .key"
+    ); do
+        echo $arn
+        (
+            set -x
+            aws lambda update-function-code --function-name $arn --image-uri $image_uri
+            aws lambda wait function-updated --function-name $arn
+        )
+    done
 }
 
 # ============================================================================
