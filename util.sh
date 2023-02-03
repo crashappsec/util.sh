@@ -412,11 +412,7 @@ function aws_ecs_redeploy_by_image {
     ); do
         echo $arn
         IFS="/" read -r _ cluster service < <(echo $arn)
-        (
-            set -x
-            aws ecs update-service --cluster $cluster --service $service --force-new-deployment
-            aws ecs wait services-stable --cluster $cluster --service $service
-        )
+        aws_ecs_redeploy $cluster $service
     done
 }
 
