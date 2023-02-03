@@ -379,7 +379,7 @@ function aws_ecr_login {
     _ensure_aws_profile
     (
         set -x
-        aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo
+        aws ecr get-login-password | docker login --username AWS --password-stdin $docker_repo > /dev/stderr
     )
 }
 
