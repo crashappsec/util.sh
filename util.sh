@@ -396,21 +396,43 @@ function aws_ecs_redeploy {
     )
 }
 
+# redeploy existing ecs service
+# usage:
+# aws_ecs_redeploy_by_image <image_uri>
+function aws_ecs_redeploy_by_image {
+    image_uri=$1
+    for arn in $(
+        aws \
+            resourcegroupstaggingapi \
+            get-resources \
+            --resource-type-filters=ecs:service \
+            --tag-filters=Key=image_uri,Values=$image_uri \
+            --query='ResourceTagMappingList[].ResourceARN' \
+            --output=text
+    ); do
+        echo $arn
+        IFS="/" read -r _ cluster service < <(echo $arn)
+        (
+            set -x
+            aws ecs update-service --cluster $cluster --service $service --force-new-deployment
+            aws ecs wait services-stable --cluster $cluster --service $service
+        )
+    done
+}
+
 # redeploy existing lambda
 # usage:
 # aws_ecs_redeploy <image_uri>
 function aws_lambda_redeploy_by_image {
-    _ensure_jq
     image_uri=$1
     for arn in $(
-        aws lambda list-functions \
-            --query 'Functions[].[FunctionArn]' \
-            --output text \
-            | xargs -I {} \
-                aws lambda list-tags \
-                --resource {} \
-                --query '{"{}":Tags}' \
-            | jq -r ". | to_entries[] | . | select(.value.image_uri == \"$image_uri\") | .key"
+        aws \
+            resourcegroupstaggingapi \
+            get-resources \
+            --resource-type-filters=lambda:function \
+            --tag-filters=Key=image_uri,Values=$image_uri \
+            --query='ResourceTagMappingList[].ResourceARN' \
+            --output=text
     ); do
         echo $arn
         (
