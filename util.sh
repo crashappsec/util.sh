@@ -178,11 +178,22 @@ function compose {
             | awk '{ print $1 }' \
             | cut -d: -f1
     ); do
-        if ! docker network inspect $i &> /dev/null; then
-            (
-                set -x
-                docker network create $i > /dev/stderr
-            )
+        # https://unix.stackexchange.com/questions/22044/correct-locking-in-shell-scripts
+        lockfile=/tmp/docker-network-$i
+        if (
+            set -o noclobber
+            echo "$$" > "$lockfile"
+        ) 2> /dev/null; then
+            trap 'rm -f "$lockfile"; exit $?' INT TERM EXIT
+            if ! docker network inspect $i &> /dev/null; then
+                (
+                    set -x
+                    docker network create $i > /dev/stderr
+                )
+            fi
+            # clean up after yourself, and release your trap
+            rm -f "$lockfile"
+            trap - INT TERM EXIT
         fi
     done
 
