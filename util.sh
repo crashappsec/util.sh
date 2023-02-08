@@ -394,6 +394,115 @@ function aws_ecr_login {
     )
 }
 
+# redeploy ecr image
+# usage:
+# aws_ecr_redeploy --repo=* [--tag=*] [--name] [--login] [--build] [--push] [--redeploy] [--ecs] [--lambda] [-- <cmd>]
+function aws_ecr_redeploy {
+    repo=
+    tag=latest
+    cmd="docker build ."
+
+    do_show_name=
+    do_login=
+    do_build=
+    do_push=
+    do_redeploy=
+    do_ecs=
+    do_lambda=
+
+    for arg; do
+        shift
+        case "$arg" in
+            --repo=*)
+                repo=${arg##*=}
+                ;;
+            --tag=*)
+                tag=${tag##*=}
+                ;;
+            --name)
+                do_show_name=true
+                ;;
+            --login)
+                do_login=true
+                ;;
+            --build)
+                do_build=true
+                ;;
+            --push)
+                do_push=true
+                ;;
+            --redeploy)
+                do_redeploy=true
+                ;;
+            --ecs)
+                do_ecs=true
+                ;;
+            --lambda)
+                do_lambda=true
+                ;;
+            --)
+                cmd=$@
+                break
+                ;;
+            *)
+                echo -e "${RED}unsupported deploy flag ${YELLOW}${arg}${END_COLOR}"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$repo" ]; then
+        echo -e "${RED}--repo=* is required${END_COLOR}"
+        exit 1
+    fi
+
+    if [ -z "$do_show_name$do_login$do_build$do_push$do_redeploy" ]; then
+        do_show_name=true
+        do_login=true
+        do_build=true
+        do_push=true
+        do_redeploy=true
+    fi
+    if [ -z "$do_ecs$do_lambda" ]; then
+        do_ecs=true
+        do_lambda=true
+    fi
+
+    name=$(aws_ecr_repo $repo):$tag
+    if [ -n "$do_show_name" ]; then
+        echo $name
+    fi
+    if [ -n "$do_login" ]; then
+        aws_ecr_login $name
+    fi
+    if [ -n "$do_build" ]; then
+        (
+            set -x
+            $cmd --tag $name
+        )
+    fi
+    if [ -n "$do_push" ]; then
+        (
+            set -x
+            docker push $name
+        )
+    fi
+    if [ -n "$do_redeploy" ]; then
+        if [ -n "$do_ecs" ]; then
+            (
+                set -x
+                aws_ecs_redeploy_by_image $name
+            )
+        fi
+        if [ -n "$do_lambda" ]; then
+            (
+                set -x
+                aws_lambda_redeploy_by_image $name
+            )
+        fi
+    fi
+}
+
 # redeploy existing ecs service
 # usage:
 # aws_ecs_redeploy <cluster> <service>
