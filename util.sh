@@ -399,7 +399,7 @@ function aws_ecr_login {
 # aws_ecr_redeploy --repo=* [--tag=*] [--name] [--login] [--build] [--push] [--redeploy] [--ecs] [--lambda] [-- <cmd>]
 function aws_ecr_redeploy {
     repo=
-    tag=latest
+    tag=
     retag=
     cmd="docker build ."
 
@@ -407,6 +407,8 @@ function aws_ecr_redeploy {
     do_login=
     do_build=
     do_retag=
+    do_latest=
+    do_git_tag=
     do_push=
     do_redeploy=
     do_ecs=
@@ -439,6 +441,12 @@ function aws_ecr_redeploy {
             --redeploy)
                 do_redeploy=true
                 ;;
+            --latest)
+                do_latest=true
+                ;;
+            --git-tag)
+                do_git_tag=true
+                ;;
             --ecs)
                 do_ecs=true
                 ;;
@@ -468,12 +476,32 @@ function aws_ecr_redeploy {
         do_push=true
         do_redeploy=true
     fi
+    if [ -z "$do_latest$do_git_tag" ]; then
+        do_latest=true
+        do_git_tag=true
+    fi
     if [ -z "$do_ecs$do_lambda" ]; then
         do_ecs=true
         do_lambda=true
     fi
 
-    name=$(aws_ecr_repo $repo):$tag
+    if [ -z "$tag" ] && [ -n "$do_git_tag" ]; then
+        tag=$(git describe --tags | sed 's/^v//' || true)
+    fi
+    if [ -z "$tag" ] && [ -n "$do_latest" ]; then
+        tag=latest
+    fi
+
+    if [ -z "$tag" ]; then
+        echo -e "${RED}tag is required${END_COLOR}"
+        echo -e "${RED}either pass ${YELLOW}--tag=*${RED} or allow auto-version via ${YELLOW}--git-tag${RED} and/or ${YELLOW}--latest${END_COLOR}"
+        exit 1
+    fi
+
+    repo=$(aws_ecr_repo $repo)
+    name=$repo:$tag
+    latest=$repo:latest
+
     if [ -n "$do_show_name" ]; then
         echo $name
     fi
@@ -499,20 +527,32 @@ function aws_ecr_redeploy {
             set -x
             docker push $name
         )
+        if [ -n "$do_latest" ]; then
+            (
+                set -x
+                docker tag $name $latest
+            )
+        fi
     fi
     if [ -n "$do_redeploy" ]; then
-        if [ -n "$do_ecs" ]; then
-            (
-                set -x
-                aws_ecs_redeploy_by_image $name
-            )
+        names=$name
+        if [ -n "$do_latest" ]; then
+            names="$names $latest"
         fi
-        if [ -n "$do_lambda" ]; then
-            (
-                set -x
-                aws_lambda_redeploy_by_image $name
-            )
-        fi
+        for i in $(echo $names | tr " " "\n" | sort -u); do
+            if [ -n "$do_ecs" ]; then
+                (
+                    set -x
+                    aws_ecs_redeploy_by_image $i
+                )
+            fi
+            if [ -n "$do_lambda" ]; then
+                (
+                    set -x
+                    aws_lambda_redeploy_by_image $i
+                )
+            fi
+        done
     fi
 }
 
