@@ -493,14 +493,14 @@ function aws_ecr_redeploy {
                 break
                 ;;
             *)
-                echo -e "${RED}unsupported deploy flag ${YELLOW}${arg}${END_COLOR}"
+                echo -e "${RED}unsupported deploy flag ${YELLOW}${arg}${END_COLOR}" > /dev/stderr
                 exit 1
                 ;;
         esac
     done
 
     if [ -z "$repo" ]; then
-        echo -e "${RED}--repo=* is required${END_COLOR}"
+        echo -e "${RED}--repo=* is required${END_COLOR}" > /dev/stderr
         exit 1
     fi
 
@@ -528,8 +528,8 @@ function aws_ecr_redeploy {
     fi
 
     if [ -z "$tag" ]; then
-        echo -e "${RED}tag is required${END_COLOR}"
-        echo -e "${RED}either pass ${YELLOW}--tag=*${RED} or allow auto-version via ${YELLOW}--git-tag${RED} and/or ${YELLOW}--latest${END_COLOR}"
+        echo -e "${RED}tag is required${END_COLOR}" > /dev/stderr
+        echo -e "${RED}either pass ${YELLOW}--tag=*${RED} or allow auto-version via ${YELLOW}--git-tag${RED} and/or ${YELLOW}--latest${END_COLOR}" > /dev/stderr
         exit 1
     fi
 
@@ -629,7 +629,7 @@ function aws_lambda_redeploy_by_image {
     image_uri=$1
     function redeploy {
         arn=$1
-        echo $arn
+        echo $arn > /dev/stderr
         (
             set -x
             aws lambda update-function-code --function-name $arn --image-uri $image_uri
