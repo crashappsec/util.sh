@@ -95,6 +95,42 @@ function _ensure_jq {
     fi
 }
 
+function _concurrent {
+    cmd=
+    for arg; do
+        shift
+        case "$arg" in
+            --)
+                cmd=$@
+                break
+                ;;
+        esac
+    done
+
+    pids=()
+    while read i; do
+        echo EXECUTING $cmd $i
+        $cmd $i &
+        pids+=($!)
+    done
+
+    exit_codes=()
+    for i in ${pids[@]}; do
+        set +e
+        wait $i
+        exit_codes+=($?)
+        set -e
+    done
+
+    # https://stackoverflow.com/questions/13635293/how-can-i-find-the-sum-of-the-elements-of-an-array-in-bash
+    sum=$(
+        IFS=+
+        echo "$((${exit_codes[*]}))"
+    )
+
+    return $sum
+}
+
 # ============================================================================
 # DOCKER
 # ============================================================================
@@ -486,7 +522,7 @@ function aws_ecr_redeploy {
     fi
 
     if [ -z "$tag" ] && [ -n "$do_git_tag" ]; then
-        tag=$(git describe --tags | sed 's/^v//' || true)
+        tag=$(git describe --tags 2> /dev/null | sed 's/^v//' || true)
     fi
     if [ -z "$tag" ] && [ -n "$do_latest" ]; then
         tag=latest
@@ -541,18 +577,14 @@ function aws_ecr_redeploy {
             names="$names $latest"
         fi
         for i in $(echo $names | tr " " "\n" | sort -u); do
-            if [ -n "$do_ecs" ]; then
-                (
-                    set -x
-                    aws_ecs_redeploy_by_image $i
-                )
-            fi
-            if [ -n "$do_lambda" ]; then
-                (
-                    set -x
-                    aws_lambda_redeploy_by_image $i
-                )
-            fi
+            (
+                if [ -n "$do_ecs" ]; then
+                    echo aws_ecs_redeploy_by_image $i
+                fi
+                if [ -n "$do_lambda" ]; then
+                    echo aws_lambda_redeploy_by_image $i
+                fi
+            ) | _concurrent
         done
     fi
 }
@@ -575,19 +607,20 @@ function aws_ecs_redeploy {
 # aws_ecs_redeploy_by_image <image_uri>
 function aws_ecs_redeploy_by_image {
     image_uri=$1
-    for arn in $(
-        aws \
-            resourcegroupstaggingapi \
-            get-resources \
-            --resource-type-filters=ecs:service \
-            --tag-filters=Key=image_uri,Values=$image_uri \
-            --query='ResourceTagMappingList[].ResourceARN' \
-            --output=text
-    ); do
-        echo $arn
+    function redeploy {
+        arn=$1
         IFS="/" read -r _ cluster service < <(echo $arn)
         aws_ecs_redeploy $cluster $service
-    done
+    }
+    aws \
+        resourcegroupstaggingapi \
+        get-resources \
+        --resource-type-filters=ecs:service \
+        --tag-filters=Key=image_uri,Values=$image_uri \
+        --query='ResourceTagMappingList[].ResourceARN' \
+        --output=text \
+        | tr '\t' '\n' \
+        | _concurrent -- redeploy
 }
 
 # redeploy existing lambda
@@ -595,22 +628,24 @@ function aws_ecs_redeploy_by_image {
 # aws_ecs_redeploy <image_uri>
 function aws_lambda_redeploy_by_image {
     image_uri=$1
-    for arn in $(
-        aws \
-            resourcegroupstaggingapi \
-            get-resources \
-            --resource-type-filters=lambda:function \
-            --tag-filters=Key=image_uri,Values=$image_uri \
-            --query='ResourceTagMappingList[].ResourceARN' \
-            --output=text
-    ); do
+    function redeploy {
+        arn=$1
         echo $arn
         (
             set -x
             aws lambda update-function-code --function-name $arn --image-uri $image_uri
             aws lambda wait function-updated --function-name $arn
         )
-    done
+    }
+    aws \
+        resourcegroupstaggingapi \
+        get-resources \
+        --resource-type-filters=lambda:function \
+        --tag-filters=Key=image_uri,Values=$image_uri \
+        --query='ResourceTagMappingList[].ResourceARN' \
+        --output=text \
+        | tr '\t' '\n' \
+        | _concurrent -- redeploy
 }
 
 # ============================================================================
