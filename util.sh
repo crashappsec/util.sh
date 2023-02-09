@@ -484,13 +484,13 @@ function aws_ecr_redeploy {
         if [ -n "$retag" ]; then
             (
                 set -x
-                $cmd
+                ($cmd)
                 docker tag $retag $name
             )
         else
             (
                 set -x
-                $cmd --tag $name
+                ($cmd --tag $name)
             )
         fi
     fi
