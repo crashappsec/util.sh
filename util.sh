@@ -400,11 +400,13 @@ function aws_ecr_login {
 function aws_ecr_redeploy {
     repo=
     tag=latest
+    retag=
     cmd="docker build ."
 
     do_show_name=
     do_login=
     do_build=
+    do_retag=
     do_push=
     do_redeploy=
     do_ecs=
@@ -417,7 +419,10 @@ function aws_ecr_redeploy {
                 repo=${arg##*=}
                 ;;
             --tag=*)
-                tag=${tag##*=}
+                tag=${arg##*=}
+                ;;
+            --retag=*)
+                retag=${arg##*=}
                 ;;
             --name)
                 do_show_name=true
@@ -476,10 +481,18 @@ function aws_ecr_redeploy {
         aws_ecr_login $name
     fi
     if [ -n "$do_build" ]; then
-        (
-            set -x
-            $cmd --tag $name
-        )
+        if [ -n "$retag" ]; then
+            (
+                set -x
+                $cmd
+                docker tag $retag $name
+            )
+        else
+            (
+                set -x
+                $cmd --tag $name
+            )
+        fi
     fi
     if [ -n "$do_push" ]; then
         (
