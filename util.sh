@@ -109,7 +109,6 @@ function _concurrent {
 
     pids=()
     while read i; do
-        echo EXECUTING $cmd $i
         $cmd $i &
         pids+=($!)
     done
