@@ -531,6 +531,7 @@ function aws_ecr_redeploy {
             (
                 set -x
                 docker tag $name $latest
+                docker push $latest
             )
         fi
     fi
