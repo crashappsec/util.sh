@@ -548,7 +548,7 @@ function aws_ecr_redeploy {
     repo=$(aws_ecr_repo $repo)
     name=$repo:$tag
     name_latest=$repo:latest
-    name_branch=$repo:$branch
+    name_branch=$repo:$(echo $branch | sed 's/[\/]/-/')
 
     if [ -n "$do_show_name" ]; then
         echo $name
