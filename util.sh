@@ -444,6 +444,7 @@ function aws_ecr_redeploy {
     do_retag=
     do_latest=
     do_git_tag=
+    do_git_branch=
     do_push=
     do_redeploy=
     do_ecs=
@@ -482,6 +483,9 @@ function aws_ecr_redeploy {
             --git-tag)
                 do_git_tag=true
                 ;;
+            --git-branch)
+                do_git_branch=true
+                ;;
             --ecs)
                 do_ecs=true
                 ;;
@@ -511,9 +515,10 @@ function aws_ecr_redeploy {
         do_push=true
         do_redeploy=true
     fi
-    if [ -z "$do_latest$do_git_tag" ]; then
+    if [ -z "$do_latest$do_git_tag$do_git_branch" ]; then
         do_latest=true
         do_git_tag=true
+        do_git_branch=true
     fi
     if [ -z "$do_ecs$do_lambda" ]; then
         do_ecs=true
@@ -533,9 +538,16 @@ function aws_ecr_redeploy {
         exit 1
     fi
 
+    branch=$(git symbolic-ref --short HEAD 2> /dev/null)
+    if [ -z "$branch" ] && [ -n "$do_git_branch" ]; then
+        echo -e "${RED}could not determine git branch${END_COLOR}" > /dev/stderr
+        exit 1
+    fi
+
     repo=$(aws_ecr_repo $repo)
     name=$repo:$tag
-    latest=$repo:latest
+    name_latest=$repo:latest
+    name_branch=$repo:$branch
 
     if [ -n "$do_show_name" ]; then
         echo $name
@@ -565,15 +577,25 @@ function aws_ecr_redeploy {
         if [ -n "$do_latest" ]; then
             (
                 set -x
-                docker tag $name $latest
-                docker push $latest
+                docker tag $name $name_latest
+                docker push $name_latest
+            )
+        fi
+        if [ -n "$do_latest" ]; then
+            (
+                set -x
+                docker tag $name $name_branch
+                docker push $name_branch
             )
         fi
     fi
     if [ -n "$do_redeploy" ]; then
         names=$name
         if [ -n "$do_latest" ]; then
-            names="$names $latest"
+            names="$names $name_latest"
+        fi
+        if [ -n "$do_git_branch" ]; then
+            names="$names $name_branch"
         fi
         for i in $(echo $names | tr " " "\n" | sort -u); do
             (
