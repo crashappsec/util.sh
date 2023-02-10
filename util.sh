@@ -435,6 +435,7 @@ function aws_ecr_login {
 function aws_ecr_redeploy {
     repo=
     tag=
+    branch=
     retag=
     cmd="docker build ."
 
@@ -538,7 +539,7 @@ function aws_ecr_redeploy {
         exit 1
     fi
 
-    branch=$(git symbolic-ref --short HEAD 2> /dev/null)
+    branch=$(git symbolic-ref --short HEAD 2> /dev/null || echo "${GITHUB_HEAD_REF:-}")
     if [ -z "$branch" ] && [ -n "$do_git_branch" ]; then
         echo -e "${RED}could not determine git branch${END_COLOR}" > /dev/stderr
         exit 1
