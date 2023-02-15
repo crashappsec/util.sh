@@ -143,6 +143,162 @@ function _cat_all_compose_files {
     done
 }
 
+function _strip_relative {
+    echo $1 | sed 's/^\.\/*//'
+}
+
+function _dockerfile_copied_files {
+    context=${1:-.}
+    dockerfile=$(_strip_relative $context/${2:-Dockerfile})
+    if ! [ -e $dockerfile ]; then
+        return
+    fi
+    (
+        echo $dockerfile
+        # sed concatenates all lines escaped with \
+        # grep finds all COPY statements without --from
+        # awk shows all columns except last
+        for i in $(
+            cat $dockerfile \
+                | sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n/ /g' \
+                | grep -Po '^COPY\K(\s+[^\s-][^\s]*)+' \
+                | awk 'NF{NF--};1' \
+                || true
+        ); do
+            stripped=$(_strip_relative $i)
+            case $stripped in
+                "") ;&
+                .) ;&
+                '$'*) ;&
+                $(_strip_relative $(dirname $dockerfile)))
+                    echo ignoring COPY $i > /dev/stderr
+                    ;;
+
+                *)
+                    _strip_relative $context/$i
+                    ;;
+            esac
+        done
+    ) | sort
+}
+
+# rebuild compose services if COPY files changed
+# usage:
+# compose_rebuild <service> [<service> ...]
+function compose_rebuild {
+    if [ -z "${CI:-}" ]; then
+        echo -e "${RED}should only conditionally rebuild in CI. locally please use normal build${END_COLOR}" > /dev/stderr
+        exit 1
+    fi
+
+    do_push=
+    for arg; do
+        shift
+        case "$arg" in
+            --push)
+                do_push=true
+                ;;
+            *)
+                set -- "$@" "$arg"
+                ;;
+        esac
+    done
+
+    if [[ -z "${@}" ]]; then
+        echo -e "${RED}Specify compose service to rebuild${END_COLOR}" > /dev/stderr
+        exit 1
+    fi
+
+    function fetch {
+        ref=$1
+        echo -e "${YELLOW}$ref${END_COLOR} is not present locally. fetching" > /dev/stderr
+        (
+            set -x
+            git fetch $remote $ref > /dev/stderr
+        )
+    }
+
+    base_ref=${GITHUB_BEFORE_REF:-${GITHUB_BASE_REF:-main}}
+    remote=$(git remote -v | head -n1 | awk '{ print $1 }')
+    if git rev-parse --verify $base_ref &> /dev/null; then
+        ref=$base_ref
+    else
+        if ! git rev-parse --verify $remote/$base_ref &> /dev/null; then
+            fetch $base_ref
+        fi
+        ref=$(git rev-parse --verify $remote/$base_ref)
+    fi
+    if [ "$base_ref" = "$ref" ]; then
+        echo -e "comparing to ${YELLOW}$ref${END_COLOR} ref" > /dev/stderr
+    else
+        echo -e "comparing to ${YELLOW}$base_ref${END_COLOR}@${YELLOW}$ref${END_COLOR} ref" > /dev/stderr
+    fi
+    if ! git cat-file -t $ref &> /dev/null; then
+        fetch $ref
+    fi
+    diff="git diff --name-only HEAD..$ref"
+    echo "$diff:" > /dev/stderr
+    $diff | sed 's/^/\t/g' > /dev/stderr
+
+    for i; do
+        if IFS=" " read -r context dockerfile image < <(
+            cat docker-compose.yml | python3 <(
+                cat << EOF
+import itertools, sys
+
+def segment(needle, haystack):
+    indent = " " * (2 + len(needle) - len(needle.lstrip()))
+    lines = iter(haystack)
+    list(itertools.takewhile(lambda i: not i.startswith(needle), lines))
+    return list(itertools.takewhile(lambda i: i.startswith(indent), lines))
+
+def value_of(needle, default, lines):
+    line = next((i.strip() for i in lines if i.strip().startswith(needle)), '')
+    return line.split(':', 1)[-1].split('#')[0].strip()
+
+service =segment('  $i:', sys.stdin.read().splitlines())
+build = segment('    build:', service)
+if build:
+    print(
+        value_of('context', '.', build),
+        value_of('dockerfile', 'Dockerfile', build),
+        value_of('# CI image:', '', service),
+    )
+EOF
+            )
+        ); then
+
+            if [ -z "$image" ]; then
+                echo -e ${RED}$i${END_COLOR}: skipping as it does not have image defined > /dev/stderr
+                continue
+            fi
+            echo -e ${YELLOW}$i${END_COLOR}: checking if COPY files changed > /dev/stderr
+            for f in $(_dockerfile_copied_files "$context" "$dockerfile"); do
+                if $diff | grep "^$f" > /dev/null; then
+                    echo -e ${YELLOW}$i${END_COLOR}: ${GREEN}$f${END_COLOR} changed causing rebuild > /dev/stderr
+                    (CI= compose build $i)
+                    (
+                        set -x
+                        docker tag $(basename $(pwd))-$i $image
+                    )
+                    if [ -n "$do_push" ]; then
+                        (
+                            set -x
+                            docker push $image
+                        )
+                    fi
+                    break
+                else
+                    echo -e ${YELLOW}$i${END_COLOR}: ${BLUE}$f${END_COLOR} didnt change > /dev/stderr
+                fi
+            done
+
+        else
+            echo -e ${RED}$i${END_COLOR}: skipping as it does not have build defined > /dev/stderr
+        fi
+    done
+}
+
 # wrapper around docker compose except:
 # * in CI it switches to using images for caching
 # * locally uses docker compose as-is which builds image from scratch
@@ -803,6 +959,12 @@ case "$target" in
     ## help:command:help print this message
     -h | --help | help)
         show_help $@
+        ;;
+    ## help:command:rebuild rebuild local docker compose service if any files in COPY changed
+    rebuild)
+        shift
+        compose_rebuild $@
+        exit 0
         ;;
     ## help:command:build build local docker compose images
     build)
