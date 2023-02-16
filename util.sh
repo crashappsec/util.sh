@@ -320,6 +320,7 @@ function compose {
 
     compose_file=
     no_deps=
+    do_build=
     args=$@
     for arg; do
         shift
@@ -332,6 +333,9 @@ function compose {
                 ;;
             --file=*)
                 compose_file=$compose_file:${arg##*=}
+                ;;
+            build)
+                do_build=true
                 ;;
         esac
         compose_file=${compose_file##:}
@@ -388,7 +392,7 @@ function compose {
         fi
     done
 
-    if [ -z "$no_deps" ]; then
+    if [ -z "$no_deps" ] && [ -z "$do_build" ]; then
         # docker compose does not allow to depend on external docker compose files
         # which is useful when we want to link to deps from external deps
         # so we manually "glue" external deps
