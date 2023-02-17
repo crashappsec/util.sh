@@ -254,7 +254,7 @@ def segment(needle, haystack):
 
 def value_of(needle, default, lines):
     line = next((i.strip() for i in lines if i.strip().startswith(needle)), '')
-    return line.split(':', 1)[-1].split('#')[0].strip()
+    return line.split(':', 1)[-1].split('#')[0].strip() or default
 
 service =segment('  $i:', sys.stdin.read().splitlines())
 build = segment('    build:', service)
