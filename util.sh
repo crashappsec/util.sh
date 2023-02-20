@@ -321,7 +321,6 @@ function compose {
     args=$@
     do_build=
     for arg; do
-        echo !!!! $arg
         shift
         case "$arg" in
             --*)
@@ -331,7 +330,6 @@ function compose {
                 do_build=true
                 ;;
         esac
-        compose_file=${compose_file##:}
     done
     set -- $@ $args
 
