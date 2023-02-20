@@ -318,10 +318,25 @@ function compose {
         echo -e "\thttps://docs.docker.com/compose/compose-v2/" > /dev/stderr
     fi
 
+    args=$@
+    do_build=
+    for arg; do
+        echo !!!! $arg
+        shift
+        case "$arg" in
+            --*)
+                break
+                ;;
+            build)
+                do_build=true
+                ;;
+        esac
+        compose_file=${compose_file##:}
+    done
+    set -- $@ $args
+
     compose_file=
     no_deps=
-    do_build=
-    args=$@
     for arg; do
         shift
         case "$arg" in
@@ -333,9 +348,6 @@ function compose {
                 ;;
             --file=*)
                 compose_file=$compose_file:${arg##*=}
-                ;;
-            build)
-                do_build=true
                 ;;
         esac
         compose_file=${compose_file##:}
