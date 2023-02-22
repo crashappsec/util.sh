@@ -275,7 +275,10 @@ EOF
             echo -e ${YELLOW}$i${END_COLOR}: checking if COPY files changed > /dev/stderr
             for f in $(_dockerfile_copied_files "$context" "$dockerfile"); do
                 f=$(realpath --relative-base=$(git rev-parse --show-toplevel 2> /dev/null) $f)
-                if $diff | grep "^$f" > /dev/null; then
+                # its valid change if the full path is valid
+                # or its part of the path which includes trailing slash
+                if $diff | grep "^$f\$" > /dev/null \
+                    || $diff | grep "^$f/" 2> /dev/null; then
                     echo -e ${YELLOW}$i${END_COLOR}: ${GREEN}$f${END_COLOR} changed causing rebuild > /dev/stderr
                     (CI= compose build $i)
                     (
