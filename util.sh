@@ -79,6 +79,7 @@ function gnu {
 function grep { gnu grep "$@"; }
 function paste { gnu paste "$@"; }
 function sed { gnu sed "$@"; }
+function find { gnu find "$@"; }
 
 # ============================================================================
 # TOOLS
