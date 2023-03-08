@@ -282,10 +282,24 @@ EOF
                     || $diff | grep "^$f/" 2> /dev/null; then
                     echo -e ${YELLOW}$i${END_COLOR}: ${GREEN}$f${END_COLOR} changed causing rebuild > /dev/stderr
                     (CI= compose build $i)
-                    (
-                        set -x
-                        docker tag $(basename $(pwd))-$i $image
-                    )
+                    hyphen=$(basename $(pwd))-$i
+                    underscore=$(basename $(pwd))_$i
+                    if docker inspect $hyphen 2>&1 > /dev/null; then
+                        (
+                            set -x
+                            docker tag $hyphen $image
+                        )
+                    elif docker inspect $hyphen 2>&1 > /dev/null; then
+                        (
+                            set -x
+                            docker tag $underscore $image
+                        )
+                    else
+                        echo -e "${RED}could not find compose built image. tried:${END_COLOR}" > /dev/stderr
+                        echo -e "* ${YELLOW}${hyphen}${END_COLOR}" > /dev/stderr
+                        echo -e "* ${YELLOW}${underscore}${END_COLOR}" > /dev/stderr
+                        exit 1
+                    fi
                     if [ -n "$do_push" ]; then
                         (
                             set -x
