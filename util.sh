@@ -289,7 +289,7 @@ EOF
                             set -x
                             docker tag $hyphen $image
                         )
-                    elif docker inspect $hyphen 2>&1 > /dev/null; then
+                    elif docker inspect $underscore 2>&1 > /dev/null; then
                         (
                             set -x
                             docker tag $underscore $image
@@ -298,6 +298,8 @@ EOF
                         echo -e "${RED}could not find compose built image. tried:${END_COLOR}" > /dev/stderr
                         echo -e "* ${YELLOW}${hyphen}${END_COLOR}" > /dev/stderr
                         echo -e "* ${YELLOW}${underscore}${END_COLOR}" > /dev/stderr
+                        echo existing images: > /dev/stderr
+                        docker image ls
                         exit 1
                     fi
                     if [ -n "$do_push" ]; then
