@@ -323,12 +323,15 @@ EOF
                         if [ -n "$do_push" ]; then
                             extra_args="$extra_args --push"
                         fi
-                        docker buildx build \
-                            -f $dockerfile \
-                            --platform=$do_platform \
-                            $extra_args \
-                            --tag=$image \
-                            .
+                        (
+                            set -x
+                            docker buildx build \
+                                -f $dockerfile \
+                                --platform=$do_platform \
+                                $extra_args \
+                                --tag=$image \
+                                .
+                        )
                     fi
                     break
                 else
