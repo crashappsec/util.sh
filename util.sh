@@ -145,12 +145,14 @@ function _cat_all_compose_files {
 }
 
 function _strip_relative {
-    echo $1 | sed 's/^\.\/*//'
+    echo ${1:-} | sed 's/^\.\/+//'
 }
 
 function _dockerfile_copied_files {
     context=${1:-.}
-    dockerfile=$(_strip_relative $context/${2:-Dockerfile})
+    dockerfile=${context%/}/${2:-Dockerfile}
+    echo -e ${YELLOW}Dockerfile context${END_COLOR} $context > /dev/stderr
+    echo -e ${YELLOW}Dockerfile${END_COLOR} $dockerfile > /dev/stderr
     if ! [ -e $dockerfile ]; then
         return
     fi
@@ -171,12 +173,12 @@ function _dockerfile_copied_files {
                 "") ;&
                 .) ;&
                 '$'*) ;&
-                $(_strip_relative $(dirname $dockerfile)))
+                $(_strip_relative $(dirname $dockerfile | sed "s#^$context##")))
                     echo ignoring COPY $i > /dev/stderr
                     ;;
 
                 *)
-                    _strip_relative $context/$i
+                    _strip_relative ${context%%/}/$i
                     ;;
             esac
         done
