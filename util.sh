@@ -193,11 +193,15 @@ function compose_rebuild {
     fi
 
     do_push=
+    do_platform=
     for arg; do
         shift
         case "$arg" in
             --push)
                 do_push=true
+                ;;
+            --platform=*)
+                do_platform=${arg##*=}
                 ;;
             *)
                 set -- "$@" "$arg"
@@ -209,6 +213,11 @@ function compose_rebuild {
         echo -e "${RED}Specify compose service to rebuild${END_COLOR}" > /dev/stderr
         exit 1
     fi
+
+    # if [ -n "$do_platform" ] && [ -z "$do_push" ]; then
+    #     echo -e ${RED}Must --push when using --platform${END_COLOR} > /dev/stderr
+    #     exit 1
+    # fi
 
     function fetch {
         ref=$1
@@ -281,32 +290,45 @@ EOF
                 if $diff | grep "^$f\$" > /dev/null \
                     || $diff | grep "^$f/" 2> /dev/null; then
                     echo -e ${YELLOW}$i${END_COLOR}: ${GREEN}$f${END_COLOR} changed causing rebuild > /dev/stderr
-                    (CI= compose build $i)
-                    hyphen=$(basename $(pwd))-$i
-                    underscore=$(basename $(pwd))_$i
-                    if docker inspect $hyphen 2>&1 > /dev/null; then
-                        (
-                            set -x
-                            docker tag $hyphen $image
-                        )
-                    elif docker inspect $underscore 2>&1 > /dev/null; then
-                        (
-                            set -x
-                            docker tag $underscore $image
-                        )
+                    if [ -z "$do_platform" ]; then
+                        (CI= compose build $i)
+                        hyphen=$(basename $(pwd))-$i
+                        underscore=$(basename $(pwd))_$i
+                        if docker inspect $hyphen 2>&1 > /dev/null; then
+                            (
+                                set -x
+                                docker tag $hyphen $image
+                            )
+                        elif docker inspect $underscore 2>&1 > /dev/null; then
+                            (
+                                set -x
+                                docker tag $underscore $image
+                            )
+                        else
+                            echo -e "${RED}could not find compose built image. tried:${END_COLOR}" > /dev/stderr
+                            echo -e "* ${YELLOW}${hyphen}${END_COLOR}" > /dev/stderr
+                            echo -e "* ${YELLOW}${underscore}${END_COLOR}" > /dev/stderr
+                            echo existing images: > /dev/stderr
+                            docker image ls
+                            exit 1
+                        fi
+                        if [ -n "$do_push" ]; then
+                            (
+                                set -x
+                                docker push $image
+                            )
+                        fi
                     else
-                        echo -e "${RED}could not find compose built image. tried:${END_COLOR}" > /dev/stderr
-                        echo -e "* ${YELLOW}${hyphen}${END_COLOR}" > /dev/stderr
-                        echo -e "* ${YELLOW}${underscore}${END_COLOR}" > /dev/stderr
-                        echo existing images: > /dev/stderr
-                        docker image ls
-                        exit 1
-                    fi
-                    if [ -n "$do_push" ]; then
-                        (
-                            set -x
-                            docker push $image
-                        )
+                        extra_args=
+                        if [ -n "$do_push" ]; then
+                            extra_args="$extra_args --push"
+                        fi
+                        docker buildx build \
+                            -f $dockerfile \
+                            --platform=$do_platform \
+                            $extra_args \
+                            --tag=$image \
+                            .
                     fi
                     break
                 else
