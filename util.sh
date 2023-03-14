@@ -903,7 +903,8 @@ function _help_file_makefile {
         | cut -d: -f2- \
         | sort \
         | sed 's/:\s*##\s*/ /g' \
-        | _help_format
+        | _help_format \
+        || true
 }
 
 function _help_file_packagejson {
@@ -911,7 +912,8 @@ function _help_file_packagejson {
         | cut -d: -f2- \
         | sort \
         | sed -r 's/^\s+"(.*)":\s+".*##\s+(@@[a-zA-Z0-9:_-]+\s+)?(.*)",?$/\1 \3/g' \
-        | _help_format
+        | _help_format \
+        || true
 }
 
 function _help_file_commands {
@@ -972,6 +974,29 @@ function _help_commands {
     } | sort | uniq
 }
 
+function _help_usage {
+    for i in $@; do
+        if [ ! -f $i ]; then
+            continue
+        fi
+        if which glow &> /dev/null; then
+            glow $i
+        elif which bat &> /dev/null; then
+            echo
+            bat --style=plain $i
+        else
+            echo
+            echo -e "${YELLOW}glow/bat${RED} is not installed. cannot pretty show ${YELLOW}$i${END_COLOR}" > /dev/stderr
+            if [ $(uname -s) = "Darwin" ]; then
+                echo -e Usually: > /dev/stderr
+                echo -e "\tbrew install glow bats" > /dev/stderr
+            fi
+            echo
+            cat $i
+        fi
+    done
+}
+
 if [[ $(type -t show_help) != function ]]; then
     # combine help from multiple sources
     # usage:
@@ -982,6 +1007,8 @@ if [[ $(type -t show_help) != function ]]; then
         _help_flags $0 $SOURCE
         echo
         _help_commands $0 $SOURCE Makefile package.json
+
+        _help_usage USAGE.md
 
         exit 0
     }
