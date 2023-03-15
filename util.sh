@@ -656,6 +656,7 @@ function aws_ecr_redeploy {
     branch=
     retag=
     cmd="docker build ."
+    tags=
 
     do_show_name=
     do_login=
@@ -710,6 +711,20 @@ function aws_ecr_redeploy {
                 ;;
             --lambda)
                 do_lambda=true
+                ;;
+            --env=*) ;&
+            --environment=*)
+                tags="$tags Key=environment,Values=${arg##*=}"
+                ;;
+            --awstag=*)
+                filter=${arg#*=}
+                if [[ "$filter" = *"="* ]]; then
+                    key=${filter%%=*}
+                    values=${filter##*=}
+                    tags="$tags Key=$key,Values=$values"
+                else
+                    tags="$tags Key=$filter"
+                fi
                 ;;
             --)
                 cmd=$@
@@ -819,10 +834,10 @@ function aws_ecr_redeploy {
         for i in $(echo $names | tr " " "\n" | sort -u); do
             (
                 if [ -n "$do_ecs" ]; then
-                    echo aws_ecs_redeploy_by_image $i
+                    echo aws_ecs_redeploy_by_image $i $tags
                 fi
                 if [ -n "$do_lambda" ]; then
-                    echo aws_lambda_redeploy_by_image $i
+                    echo aws_lambda_redeploy_by_image $i $tags
                 fi
             ) | _concurrent
         done
@@ -847,18 +862,23 @@ function aws_ecs_redeploy {
 # aws_ecs_redeploy_by_image <image_uri>
 function aws_ecs_redeploy_by_image {
     image_uri=$1
+    shift
+    tags=$@
     function redeploy {
         arn=$1
         IFS="/" read -r _ cluster service < <(echo $arn)
         aws_ecs_redeploy $cluster $service
     }
-    aws \
-        resourcegroupstaggingapi \
-        get-resources \
-        --resource-type-filters=ecs:service \
-        --tag-filters=Key=image_uri,Values=$image_uri \
-        --query='ResourceTagMappingList[].ResourceARN' \
-        --output=text \
+    (
+        set -x
+        aws \
+            resourcegroupstaggingapi \
+            get-resources \
+            --resource-type-filters=ecs:service \
+            --tag-filters Key=image_uri,Values=$image_uri $@ \
+            --query='ResourceTagMappingList[].ResourceARN' \
+            --output=text
+    ) \
         | tr '\t' '\n' \
         | _concurrent -- redeploy
 }
@@ -868,6 +888,8 @@ function aws_ecs_redeploy_by_image {
 # aws_ecs_redeploy <image_uri>
 function aws_lambda_redeploy_by_image {
     image_uri=$1
+    shift
+    tags=$@
     function redeploy {
         arn=$1
         echo $arn > /dev/stderr
@@ -877,13 +899,16 @@ function aws_lambda_redeploy_by_image {
             aws lambda wait function-updated --function-name $arn
         )
     }
-    aws \
-        resourcegroupstaggingapi \
-        get-resources \
-        --resource-type-filters=lambda:function \
-        --tag-filters=Key=image_uri,Values=$image_uri \
-        --query='ResourceTagMappingList[].ResourceARN' \
-        --output=text \
+    (
+        set -x
+        aws \
+            resourcegroupstaggingapi \
+            get-resources \
+            --resource-type-filters=lambda:function \
+            --tag-filters Key=image_uri,Values=$image_uri $@ \
+            --query='ResourceTagMappingList[].ResourceARN' \
+            --output=text
+    ) \
         | tr '\t' '\n' \
         | _concurrent -- redeploy
 }
