@@ -746,6 +746,16 @@ function aws_ecr_redeploy {
         exit 1
     fi
 
+    if [ -z "${CI:-}" ] && [ -z "$tags" ]; then
+        echo -e ${RED}Redeploy is too broad. Please target either ${YELLOW}--env=*${RED} or ${YELLOW}--awstag=*${END_COLOR}
+        read -p "Redeploy anyway? [Y/N] " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo -e ${BLUE}Redeploying everything${END_COLOR}
+        else
+            exit 1
+        fi
+    fi
+
     if [ -z "$do_show_name$do_login$do_build$do_push$do_redeploy" ]; then
         do_show_name=true
         do_login=true
