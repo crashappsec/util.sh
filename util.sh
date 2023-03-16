@@ -651,6 +651,10 @@ function aws_ecr_login {
 # usage:
 # aws_ecr_redeploy --repo=* [--tag=*] [--name] [--login] [--build] [--push] [--redeploy] [--ecs] [--lambda] [-- <cmd>]
 function aws_ecr_redeploy {
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    export DOCKER_BUILDKIT=1
+    export DOCKER_DEFAULT_PLATFORM=${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+
     repo=
     tag=
     branch=
