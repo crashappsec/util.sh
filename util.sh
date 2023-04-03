@@ -604,16 +604,64 @@ function aws_secret {
     _ensure_jq
     _ensure_aws_profile
     id=$1
-    key=$2
-    (
+    key=${2:-}
+    value=$(
         set -x
         aws secretsmanager \
             get-secret-value \
             --secret-id=$id \
             --query='SecretString' \
-            --output=text \
-            | jq ".$key" -r
+            --output=text
     )
+    if [ -n "$key" ]; then
+        echo $value | jq ".$key" -r
+    else
+        echo $value
+    fi
+}
+
+# get the content of the aws secret found by its tags
+# usage:
+# aws_secret_by_tags <key> --tag=<name>=<value>
+function aws_secret_by_tags {
+    tags=
+    for arg; do
+        shift
+        case "$arg" in
+            --tag=*)
+                filter=${arg#*=}
+                if [[ "$filter" = *"="* ]]; then
+                    key=${filter%%=*}
+                    values=${filter##*=}
+                    tags="$tags Key=$key,Values=$values"
+                else
+                    tags="$tags Key=$filter"
+                fi
+                ;;
+            *)
+                set -- "$@" "$arg"
+                ;;
+        esac
+    done
+    if [ -z "$tags" ]; then
+        echo -e "${RED}must filter by at least one ${YELLOW}--tag=key=value${END_COLOR}"
+        exit 1
+    fi
+    _ensure_aws_profile
+    key=${1:-}
+    arn=$(
+        set -x
+        aws resourcegroupstaggingapi get-resources \
+            --resource-type-filters=secretsmanager:secret \
+            --tag-filters $tags \
+            --query='ResourceTagMappingList[].ResourceARN' \
+            --output=text
+    )
+    if [ -z "$arn" ]; then
+        echo -e ${RED}could not find secret${END_COLOR}
+        exit 1
+    fi
+    aws_secret $arn $key
 }
 
 # lookup full ecr repo by its name
@@ -829,7 +877,7 @@ function aws_ecr_redeploy {
                 docker push $name_latest
             )
         fi
-        if [ -n "$do_latest" ]; then
+        if [ -n "$do_git_branch" ]; then
             (
                 set -x
                 docker tag $name $name_branch
