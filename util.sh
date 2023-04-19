@@ -821,8 +821,17 @@ function aws_ecr_redeploy {
         do_lambda=true
     fi
 
+    branch=$(git symbolic-ref --short HEAD 2> /dev/null || echo "${GITHUB_HEAD_REF:-}")
+    if [ -z "$branch" ] && [ -n "$do_git_branch" ]; then
+        echo -e "${RED}could not determine git branch${END_COLOR}" > /dev/stderr
+        exit 1
+    fi
+
     if [ -z "$tag" ] && [ -n "$do_git_tag" ]; then
         tag=$(git describe --tags 2> /dev/null | sed 's/^v//' || true)
+    fi
+    if [ -z "$tag" ] && [ -n "$do_git_branch" ]; then
+        tag=$branch
     fi
     if [ -z "$tag" ] && [ -n "$do_latest" ]; then
         tag=latest
@@ -830,13 +839,7 @@ function aws_ecr_redeploy {
 
     if [ -z "$tag" ]; then
         echo -e "${RED}tag is required${END_COLOR}" > /dev/stderr
-        echo -e "${RED}either pass ${YELLOW}--tag=*${RED} or allow auto-version via ${YELLOW}--git-tag${RED} and/or ${YELLOW}--latest${END_COLOR}" > /dev/stderr
-        exit 1
-    fi
-
-    branch=$(git symbolic-ref --short HEAD 2> /dev/null || echo "${GITHUB_HEAD_REF:-}")
-    if [ -z "$branch" ] && [ -n "$do_git_branch" ]; then
-        echo -e "${RED}could not determine git branch${END_COLOR}" > /dev/stderr
+        echo -e "${RED}either pass ${YELLOW}--tag=*${RED} or allow auto-version via ${YELLOW}--git-tag; --git-branch; --latest${END_COLOR}" > /dev/stderr
         exit 1
     fi
 
