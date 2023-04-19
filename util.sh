@@ -98,9 +98,13 @@ function _ensure_jq {
 
 function _concurrent {
     cmd=
+    limit=10
     for arg; do
         shift
         case "$arg" in
+            --limit)
+                limit=${arg##*=}
+                ;;
             --)
                 cmd=$@
                 break
@@ -108,18 +112,33 @@ function _concurrent {
         esac
     done
 
-    pids=()
-    while read i; do
-        $cmd $i &
-        pids+=($!)
-    done
-
     exit_codes=()
-    for i in ${pids[@]}; do
-        set +e
-        wait $i
-        exit_codes+=($?)
-        set -e
+
+    while true; do
+
+        counter=0
+        pids=()
+
+        while read i; do
+            $cmd $i &
+            pids+=($!)
+            counter=$((counter + 1))
+            if [ $counter -eq $limit ]; then
+                break
+            fi
+        done
+
+        if [ ${#pids[@]} -eq 0 ]; then
+            break
+        fi
+
+        for i in ${pids[@]}; do
+            set +e
+            wait $i
+            exit_codes+=($?)
+            set -e
+        done
+
     done
 
     # https://stackoverflow.com/questions/13635293/how-can-i-find-the-sum-of-the-elements-of-an-array-in-bash
