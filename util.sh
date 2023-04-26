@@ -164,7 +164,7 @@ function _cat_all_compose_files {
 }
 
 function _strip_relative {
-    echo ${1:-} | sed 's/^\.\/+//'
+    echo ${1:-} | sed -E 's#^\./+##'
 }
 
 function _dockerfile_copied_files {
@@ -192,7 +192,7 @@ function _dockerfile_copied_files {
                 "") ;&
                 .) ;&
                 '$'*) ;&
-                $(_strip_relative $(dirname $dockerfile | sed "s#^$context##")))
+                $(_strip_relative $(dirname $dockerfile | sed "s#^$context/?##")))
                     echo ignoring COPY $i > /dev/stderr
                     ;;
 
