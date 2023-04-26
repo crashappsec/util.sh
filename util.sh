@@ -420,7 +420,7 @@ function compose {
     set -- $@ $args
     compose_file=${compose_file:-${COMPOSE_FILE:-docker-compose.yml}}
 
-    while ! [ -f $compose_file ]; do
+    while ! [ -f $compose_file ] && [ "$(pwd)" != "/" ]; do
         cd ..
     done
 
