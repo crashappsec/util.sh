@@ -420,6 +420,10 @@ function compose {
     set -- $@ $args
     compose_file=${compose_file:-${COMPOSE_FILE:-docker-compose.yml}}
 
+    while ! [ -f $compose_file ]; do
+        cd ..
+    done
+
     # by default docker when mounts a non-existing path will create a folder
     # vs sometimes we would like to mount optional config files
     # marking mount with "# ensure:file" will touch that file if not present
