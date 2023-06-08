@@ -605,6 +605,9 @@ function service_for_compose {
 # ============================================================================
 
 function _ensure_aws_profile {
+    if [ -n "${CI:-}" ]; then
+        return
+    fi
     if ! which aws &> /dev/null; then
         echo -e ${RED}aws cli is missing${END_COLOR} > /dev/stderr
         echo -e Usually: > /dev/stderr
@@ -628,18 +631,18 @@ function aws_secret {
     _ensure_aws_profile
     id=$1
     key=${2:-}
-    value=$(
+    function value {
         set -x
         aws secretsmanager \
             get-secret-value \
             --secret-id=$id \
             --query='SecretString' \
             --output=text
-    )
+    }
     if [ -n "$key" ]; then
-        echo $value | jq ".$key" -r
+        value | jq ".$key" -r
     else
-        echo $value
+        value
     fi
 }
 
