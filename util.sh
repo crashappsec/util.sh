@@ -733,7 +733,7 @@ function aws_ecr_redeploy {
     tag=
     branch=
     retag=
-    cmd="docker build ."
+    cmd="docker buildx build . --load"
     tags=
 
     do_show_name=
