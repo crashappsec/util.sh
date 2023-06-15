@@ -683,6 +683,7 @@ function aws_secret_by_tags {
             --query='ResourceTagMappingList[].ResourceARN' \
             --output=text
     )
+    arn=$(echo $arn | tr " " "\n" | head -n1)
     if [ -z "$arn" ]; then
         echo -e ${RED}could not find secret${END_COLOR}
         exit 1
