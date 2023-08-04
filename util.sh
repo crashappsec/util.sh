@@ -730,6 +730,7 @@ function aws_ecr_redeploy {
     export DOCKER_BUILDKIT=1
     export DOCKER_DEFAULT_PLATFORM=${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
 
+    env=${env:-}
     repo=
     tag=
     branch=
@@ -793,7 +794,7 @@ function aws_ecr_redeploy {
                 ;;
             --env=*) ;&
             --environment=*)
-                tags="$tags Key=environment,Values=${arg##*=}"
+                env=${arg##*=}
                 ;;
             --awstag=*)
                 filter=${arg#*=}
@@ -815,6 +816,10 @@ function aws_ecr_redeploy {
                 ;;
         esac
     done
+
+    if [ -n $env ]; then
+        tags="$tags Key=environment,Values=$env"
+    fi
 
     if [ -z "$repo" ]; then
         echo -e "${RED}--repo=* is required${END_COLOR}" > /dev/stderr
