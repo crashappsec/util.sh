@@ -817,7 +817,7 @@ function aws_ecr_redeploy {
         esac
     done
 
-    if [ -n $env ]; then
+    if [ -n "$env" ]; then
         tags="$tags Key=environment,Values=$env"
     fi
 
