@@ -1019,7 +1019,7 @@ function lint {
     shift
     all_args=$@
 
-    cmd="compose run -it --rm pre-commit"
+    cmd="compose run -i --rm pre-commit"
     files=
     args=
     diff=
