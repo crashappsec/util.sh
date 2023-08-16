@@ -1011,6 +1011,119 @@ function aws_lambda_redeploy_by_image {
 }
 
 # ============================================================================
+# PRE-COMMIT
+# ============================================================================
+
+function lint {
+    name=$1
+    shift
+    all_args=$@
+
+    cmd="compose run -it --rm pre-commit"
+    files=
+    args=
+    diff=
+    run_on=
+
+    do_diff=true
+    do_all=
+    do_git=
+    do_help=
+
+    if [ -z "$all_args" ]; then
+        $cmd
+    fi
+
+    for arg; do
+        shift
+        case "$arg" in
+            -h | --help)
+                if [ -n "$do_help" ]; then
+                    do_help=
+                    args="$args $arg"
+                else
+                    do_help=true
+                fi
+                ;;
+            -d | --diff)
+                do_diff=true
+                ;;
+            -D | --no-diff)
+                do_diff=false
+                ;;
+            -a | --all | --all-files)
+                do_all=true
+                do_git=
+                ;;
+            -g | --git)
+                do_git=true
+                do_all=
+                ;;
+            --)
+                cmd=$@
+                break
+                ;;
+            *)
+                if [ -e $arg ]; then
+                    files="$files $arg"
+                else
+                    args="$args $arg"
+                fi
+                ;;
+        esac
+    done
+
+    if [ -n "$do_help" ]; then
+        cat << EOF
+${IYELLOW}$0 $name ${IRED}[hook] ${IGREEN}[path...] ${IBLUE}[-g/--git] ${IYELLOW}[-a/--all/--all-files] [-d/--diff] [-D/--no-diff]${IEND_COLOR}
+
+This is a docker-compose wrapper for running pre-commit checks.
+It assumes pre-commit service is defined in ${IYELLOW}docker-compose.yml${IEND_COLOR}.
+
+To see pre-commit run --help, add another add another --help arg:
+    ${IYELLOW}$0 $name $all_args ${IRED}--help${IEND_COLOR}
+
+To run default pre-commit configuration as defined in Dockerfile:
+    ${IYELLOW}$0 $name${IEND_COLOR}
+
+To run all hooks on staged files only:
+    ${IYELLOW}$0 $name ${IBLUE}--git${IEND_COLOR}
+
+To run specific hook on all files:
+    ${IYELLOW}$0 $name ${IRED}hook${IEND_COLOR}
+
+To run specific hook on staged files only:
+    ${IYELLOW}$0 $name ${IRED}hook ${IBLUE}--git${IEND_COLOR}
+
+To run all hooks on specific file(s):
+    ${IYELLOW}$0 $name ${IGREEN}path [...path]${IEND_COLOR}
+
+Hook and file paths can be mixed to run specific hook on specific files:
+    ${IYELLOW}$0 $name ${IRED}hook ${IGREEN}path [...path]${IEND_COLOR}
+
+Enabling (default) or disabling showing diff on failure can be done with either:
+    ${IYELLOW}-d/--diff${IEND_COLOR}
+    ${IYELLOW}-D/--no-diff${IEND_COLOR}
+EOF
+        exit
+    fi
+    if [ -n "$do_diff" ]; then
+        diff=--show-diff-on-failure
+    fi
+    if [ -n "$files" ]; then
+        run_on="--files $files"
+    fi
+    if [ -n "$do_git" ]; then
+        run_on="--files $(git status --short | awk '{print $2}')"
+    fi
+    if [ -n "$do_all" ] || [ -z "$run_on" ]; then
+        run_on="--all-files"
+    fi
+
+    $cmd pre-commit run $args $run_on $diff
+}
+
+# ============================================================================
 # HELP
 # ============================================================================
 
