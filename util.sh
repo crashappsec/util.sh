@@ -1049,7 +1049,7 @@ function lint {
                 do_diff=true
                 ;;
             -D | --no-diff)
-                do_diff=false
+                do_diff=
                 ;;
             -a | --all | --all-files)
                 do_all=true
