@@ -4,9 +4,9 @@ set -eEu
 set -o pipefail
 
 function show_help {
-    name=$(basename $0)
+    name=$(basename "$0")
     cat <(
-        cat <<EOF
+        cat << EOF
 ${IYELLOW}${name}${IEND_COLOR} [ROLE] [--config] [--shell=*] [-- <CMD>]
 
 Wrapper around 'aws sts assume-role'
@@ -40,21 +40,66 @@ ${IGREEN}$name <ROLE> -- ./build.sh deploy${IEND_COLOR}
 
 EOF
     )
-    _help_flags $0
+    _help_flags "$0"
     exit 0
 }
 
 SCRIPTPATH="$(
-    cd $(dirname $(realpath "$0")) >/dev/null 2>&1
+    cd "$(dirname "$(realpath "$0")")" > /dev/null 2>&1
     pwd -P
 )"
-source $SCRIPTPATH/../util.sh
+source "$SCRIPTPATH/../util.sh"
 
-_ensure_aws_profile
+credentials=
+env=
+export=
+cmd=
+profile=role
+role=
+external_id=
+shell=${STARSHIP_SHELL:-bash}
 
 if [ -t 0 ]; then
     role=$1
     shift
+fi
+
+for arg; do
+    shift
+    case "$arg" in
+        ## help:flag:--config output ~/.aws/credentials config block
+        ## help:flag:--credentials output ~/.aws/credentials config block
+        --config) ;&
+        --credentials)
+            credentials=true
+            ;;
+        ## help:flag:--profile=* name of profile to export with --config. default is "role"
+        --profile=*)
+            profile=${arg##*=}
+            ;;
+        ## help:flag:--external-id=* external id to assume role with
+        --external-id=*)
+            external_id=${arg##*=}
+            ;;
+        ## help:flag:--shell=* which shell to output env vars
+        --shell=*)
+            shell=${arg##*=}
+            ;;
+        ## help:flag:-- after delimiter execute command with AWS assumed role
+        --)
+            cmd="$*"
+            export=true
+            break
+            ;;
+        *)
+            set -- "$@" "$arg"
+            ;;
+    esac
+done
+
+_ensure_aws_profile
+
+if [ -t 0 ]; then
     if ! [[ "$role" = arn* ]]; then
         role=arn:aws:iam::$(
             aws sts get-caller-identity \
@@ -62,20 +107,29 @@ if [ -t 0 ]; then
                 --output=text
         ):role/$role
     fi
-    assumed_role=$(aws sts assume-role --role-arn=$role --role-session-name=$(date +%s))
+    external_id_arg=
+    if [ -n "$external_id" ]; then
+        external_id_arg="--external-id=$external_id"
+    fi
+    assumed_role=$(
+        aws sts assume-role \
+            --role-arn="$role" \
+            --role-session-name="$(date +%s)" \
+            $external_id_arg
+    )
 else
     assumed_role=$(cat -)
 fi
 
 region=${AWS_DEFAULT_REGION:-$(aws configure get region)}
-key_id=$(echo $assumed_role | jq -r '.Credentials.AccessKeyId')
-secret_key=$(echo $assumed_role | jq -r '.Credentials.SecretAccessKey')
-session_token=$(echo $assumed_role | jq -r '.Credentials.SessionToken')
-expiration=$(echo $assumed_role | jq -r '.Credentials.Expiration')
+key_id=$(echo "$assumed_role" | jq -r '.Credentials.AccessKeyId')
+secret_key=$(echo "$assumed_role" | jq -r '.Credentials.SecretAccessKey')
+session_token=$(echo "$assumed_role" | jq -r '.Credentials.SessionToken')
+expiration=$(echo "$assumed_role" | jq -r '.Credentials.Expiration')
 
 function _credentials {
-    cat <<EOF
-[role]
+    cat << EOF
+[$profile]
 region = $region
 aws_access_key_id = $key_id
 aws_secret_access_key = $secret_key
@@ -89,62 +143,29 @@ function _env {
         export="export "
     fi
     case "$shell" in
-    fish)
-        cat <<EOF
+        fish)
+            cat << EOF
+set -e AWS_PROFILE
 set -gx AWS_DEFAULT_REGION $region
 set -gx AWS_ACCESS_KEY_ID $key_id
 set -gx AWS_SECRET_ACCESS_KEY $secret_key
 set -gx AWS_SESSION_TOKEN $session_token
 EOF
-        ;;
-    *)
-        cat <<EOF
+            ;;
+        *)
+            cat << EOF
+unset AWS_PROFILE
 ${export}AWS_DEFAULT_REGION=$region
 ${export}AWS_ACCESS_KEY_ID=$key_id
 ${export}AWS_SECRET_ACCESS_KEY=$secret_key
 ${export}AWS_SESSION_TOKEN=$session_token
 EOF
-        ;;
+            ;;
     esac
 }
 
-credentials=
-env=
-export=
-cmd=
-profile=role
-shell=${STARSHIP_SHELL:-bash}
-
-for arg; do
-    shift
-    case "$arg" in
-    ## help:flag:--config output ~/.aws/credentials config block
-    ## help:flag:--credentials output ~/.aws/credentials config block
-    --config) ;&
-    --credentials)
-        credentials=true
-        ;;
-    ## help:flag:--profile=* name of profile to export with --config. default is "role"
-    --profile=*)
-        profile=${arg##*=}
-        ;;
-    ## help:flag:--shell=* which shell to output env vars
-    --shell=*)
-        shell=${arg##*=}
-        ;;
-    ## help:flag:-- after delimiter execute command with AWS assumed role
-    --)
-        cmd="$@"
-        export=true
-        break
-        ;;
-    *)
-        set -- "$@" "$arg"
-        ;;
-    esac
-done
-
 if [ -n "$cmd" ]; then
+    # shellcheck disable=1090
     source <(shell=bash _env)
     exec $cmd
 
