@@ -41,6 +41,14 @@ cmd=
 subcmd=
 _ghapp_jwt=$(mktemp -u)
 
+cleanup() {
+    if [ -f "$_ghapp_jwt" ]; then
+        rm "$_ghapp_jwt"
+    fi
+}
+
+trap cleanup EXIT INT TERM
+
 # https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app#generating-a-json-web-token-jwt
 ghapp_jwt() {
     if [ -f "$_ghapp_jwt" ]; then
@@ -129,7 +137,11 @@ for arg; do
             ;;
     esac
 done
-subcmd=$1
+subcmd=${1:-}
+
+if [ -z "$subcmd" ]; then
+    show_help
+fi
 
 _ensure_aws_profile
 
