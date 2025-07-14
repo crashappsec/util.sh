@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+set -eEu
+set -o pipefail
+
+function show_help {
+    name=$(basename "$0")
+    cat <(
+        cat << EOF
+${IYELLOW}${name}${IEND_COLOR} --env=* [SUBCMD] [--org=*] [--install-id=*] [-- <CMD>]
+
+Wrapper for interacting with Github App installations from AWS secret.
+https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28
+
+This can also set ${IGREEN}GITHUB_TOKEN${IEND_COLOR} to be used with other
+commands such as GitHub CLI:
+
+${IGREEN}$name --env=prod --org=foo -- ${IYELLOW}repo list foo${IEND_COLOR}
+
+$(_help_commands "$0")
+
+$(_help_flags "$0")
+EOF
+    )
+    exit 0
+}
+SCRIPTPATH="$(
+    cd "$(dirname "$(realpath "$0")")" > /dev/null 2>&1
+    pwd -P
+)"
+source "$SCRIPTPATH/../util.sh"
+
+url_base64() {
+    cat | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'
+}
+
+env=dev
+org=
+install_id=
+cmd=
+subcmd=
+_ghapp_jwt=$(mktemp -u)
+
+# https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app#generating-a-json-web-token-jwt
+ghapp_jwt() {
+    if [ -f "$_ghapp_jwt" ]; then
+        cat "$_ghapp_jwt"
+        return
+    fi
+
+    secret=$(aws_secret_by_tags --tag=provider=github --tag="environment=$env")
+    app_id=$(echo "$secret" | jq -r '.app_id')
+    private_key=$(echo "$secret" | jq -r '.private_key')
+
+    now=$(date +%s)
+    iat=$((now - 60))  # allow for drift
+    exp=$((iat + 100)) # 10 mins
+
+    header=$(echo -n "{\"alg\":\"RS256\",\"typ\":\"JWT\"}" | url_base64)
+    payload=$(echo -n "{\"iat\":$iat,\"exp\":$exp,\"iss\":\"$app_id\"}" | url_base64)
+    unsigned_token="${header}.${payload}"
+
+    signature=$(
+        echo -n "$unsigned_token" \
+            | openssl dgst -sha256 -sign <(echo "$private_key")"" \
+            | url_base64
+    )
+
+    echo "${unsigned_token}.${signature}" | tee "$_ghapp_jwt"
+}
+
+ghapp_curl() {
+    bearer=$(ghapp_jwt)
+    echo "$1" > /dev/stderr
+    http "${2:-GET}" "$1" \
+        --follow \
+        -A bearer \
+        -a "$bearer" \
+        Accept:application/vnd.github+json \
+        X-GitHub-Api-Version:2022-11-28
+}
+
+lookup_installid() {
+    if [ -z "$install_id" ]; then
+        if [ -z "$org" ]; then
+            echo "${IRED}--org is required${IEND_COLOR}" > /dev/stderr
+            exit 1
+        fi
+        install_id=$(
+            ghapp_curl \
+                "https://api.github.com/orgs/$org/installation" \
+                | jq -r '.id'
+        )
+    fi
+}
+
+export_github_token() {
+    GITHUB_TOKEN=$(
+        ghapp_curl \
+            "https://api.github.com/app/installations/$install_id/access_tokens" POST \
+            | jq -r '.token'
+    )
+    export GITHUB_TOKEN
+}
+
+for arg; do
+    shift
+    case "$arg" in
+        ## help:flag:--env=* github app env
+        --env=*)
+            env=${arg##*=}
+            ;;
+        ## help:flag:--org=* github org name (if install-id is unknown)
+        --org=*)
+            org=${arg##*=}
+            ;;
+        ## help:flag:--install-id=* github app installation id
+        --install-id=*) ;&
+        --install_id=*)
+            install_id=${arg##*=}
+            ;;
+        ## help:flag:-- after delimiter execute command with GITHUB_TOKEN set
+        --)
+            cmd="$*"
+            break
+            ;;
+        *)
+            set -- "$@" "$arg"
+            ;;
+    esac
+done
+subcmd=$1
+
+_ensure_aws_profile
+
+if [ -n "$cmd" ]; then
+    lookup_installid
+    export_github_token
+    exec $cmd
+fi
+
+case "$subcmd" in
+    ## help:command:jwt show GitHub app JWT
+    jwt)
+        ghapp_jwt
+        ;;
+    ## help:command:app /app
+    app)
+        ghapp_curl "https://api.github.com/app"
+        ;;
+    ## help:command:requests /app/installation-requests
+    requests)
+        ghapp_curl "https://api.github.com/app/installation-requests"
+        ;;
+    ## help:command:installations /app/installations
+    installations)
+        ghapp_curl "https://api.github.com/app/installations"
+        ;;
+    ## help:command/installation /app/installations/{installation_id}
+    installation) ;&
+    install)
+        lookup_installid
+        ghapp_curl "https://api.github.com/app/installations/$install_id"
+        ;;
+    ## help:command:access-tokens /app/installations/{installation_id}/access_tokens
+    access-tokens) ;&
+    access_tokens)
+        lookup_installid
+        ghapp_curl "https://api.github.com/app/installations/$install_id/access_tokens" POST
+        ;;
+    ## help:command:org /orgs/{org}/installation
+    org)
+        ghapp_curl "https://api.github.com/orgs/$org/installation"
+        ;;
+    *)
+        echo "$subcmd is not supported" > /dev/stderr
+        exit 1
+        ;;
+esac
