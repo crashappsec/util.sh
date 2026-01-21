@@ -385,10 +385,8 @@ function compose {
         echo -e "\thttps://docs.docker.com/compose/compose-v2/" > /dev/stderr
     fi
 
-    args=$@
     do_build=
     for arg; do
-        shift
         case "$arg" in
             --*)
                 break
@@ -398,12 +396,10 @@ function compose {
                 ;;
         esac
     done
-    set -- $@ $args
 
     compose_file=
     no_deps=
     for arg; do
-        shift
         case "$arg" in
             --no-deps)
                 no_deps=true
@@ -417,7 +413,6 @@ function compose {
         esac
         compose_file=${compose_file##:}
     done
-    set -- $@ $args
     compose_file=${compose_file:-${COMPOSE_FILE:-docker-compose.yml}}
 
     while ! [ -f $compose_file ] && [ "$(pwd)" != "/" ]; do
